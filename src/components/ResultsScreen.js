@@ -150,7 +150,7 @@ export default function ResultsScreen({
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
