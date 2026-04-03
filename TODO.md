@@ -9,6 +9,7 @@ vdsexamapp/
 ├── index.js                        # registerRootComponent (Expo)
 ├── app.json                        # Configurazione Expo SDK 54
 ├── package.json                    # expo ~54.0.33, react-native 0.81.5
+├── metro.config.js                 # Configurazione Metro bundler
 ├── assets/                         # Icone Expo (adaptive-icon, splash, favicon)
 └── src/
     ├── components/
@@ -19,22 +20,25 @@ vdsexamapp/
     │   └── questions.json          # 882 domande in 9 categorie
     ├── utils/
     │   └── questionSelector.js     # Selezione casuale, calcolo risultati
-    └── assets/                     # Figure esame (28 immagini)
+    └── assets/                     # Figure esame (24 immagini, fig1-fig24)
 ```
 
 ### Cosa è già stato fatto
-- [x] Estrazione 882 domande da Esame_VDS.java
-- [x] Configurazione Expo SDK 54
-- [x] Conversione da class a functional components (React hooks)
+- [x] Estrazione 882 domande da Esame_VDS.java (125+107+142+243+34+49+81+25+76)
+- [x] Configurazione Expo SDK 54 (expo ~54.0.33, react-native 0.81.5, React 19.1.0)
+- [x] Conversione da class a functional components (React hooks: useState, useCallback, useMemo)
 - [x] Fix bug userAnswer 'X' vs null (coerente con sorgente Java)
-- [x] Fix import/export tra component
-- [x] Copia immagini figure
-- [x] Expo avviato e verificato su http://localhost:8081
+- [x] Fix import/export tra componenti
+- [x] Copia immagini figure (24 immagini, fig1-fig24)
+- [x] Visualizzazione immagini nelle domande con figura (figureMap statica)
+- [x] Fix SafeAreaView deprecato → View + Platform.OS
+- [x] Fix Android nav bar sovrapposizione (paddingBottom condizionale)
+- [x] Expo testato e funzionante su dispositivo fisico
 
 ### Esame Multiassi - ALA FISSA
 - Totale: 70 domande
 - Suddivisione: 10+10+12+12+4+4+6+6+6
-- Soglia passaggi: errate <= 7
+- Soglia passaggio: errate <= 7 (≤10%)
 
 ### Come avviare
 ```bash
