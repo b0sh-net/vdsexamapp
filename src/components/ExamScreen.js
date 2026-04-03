@@ -6,7 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  SafeAreaView,
+  Platform,
 } from 'react-native';
 import {
   generateRandomExam,
@@ -301,7 +301,9 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 15,
+    paddingHorizontal: 15,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'android' ? 25 : 15,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
