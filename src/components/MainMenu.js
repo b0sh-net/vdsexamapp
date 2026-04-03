@@ -4,12 +4,15 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
+  Platform,
+  StatusBar,
 } from 'react-native';
+
+const TOP_PADDING = Platform.OS === 'android' ? 50 : 60;
 
 export default function MainMenu({ onStart_exam }) {
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logoText}>✈ VDS</Text>
@@ -43,7 +46,7 @@ export default function MainMenu({ onStart_exam }) {
       <TouchableOpacity style={styles.startButton} onPress={onStart_exam}>
         <Text style={styles.startButtonText}>SIMULA ESAME</Text>
       </TouchableOpacity>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -51,10 +54,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a4d7a',
+    paddingTop: TOP_PADDING,
   },
   header: {
     alignItems: 'center',
-    paddingTop: 80,
+    paddingTop: 20,
     paddingBottom: 30,
     paddingHorizontal: 20,
   },

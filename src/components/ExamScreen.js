@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Alert,
   Platform,
+  StatusBar,
 } from 'react-native';
 import {
   generateRandomExam,
@@ -107,7 +108,7 @@ export default function ExamScreen({ onFinish_exam }) {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <Text style={styles.headerTitle}>Esame VDS</Text>
@@ -179,7 +180,7 @@ export default function ExamScreen({ onFinish_exam }) {
           </TouchableOpacity>
         )}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

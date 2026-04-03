@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
 } from 'react-native';
 
 export default function ResultsScreen({
@@ -32,7 +31,7 @@ export default function ResultsScreen({
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Esito Esame</Text>
