@@ -2,14 +2,14 @@
 
 ## Status: ✅ COMPLETO
 
-### Struttura completa
+### Struttura del progetto
 ```
 vdsexamapp/
 ├── App.js                          # Entry point con navigazione (state-based)
 ├── index.js                        # registerRootComponent (Expo)
 ├── app.json                        # Configurazione Expo SDK 54
 ├── package.json                    # expo ~54.0.33, react-native 0.81.5
-├── metro.config.js                 # Configurazione Metro bundler
+├── metro.config.js                 # Metro bundler config
 ├── assets/                         # Icone Expo (adaptive-icon, splash, favicon)
 └── src/
     ├── components/
@@ -20,33 +20,27 @@ vdsexamapp/
     │   └── questions.json          # 882 domande in 9 categorie
     ├── utils/
     │   └── questionSelector.js     # Selezione casuale, calcolo risultati
-    └── assets/                     # Figure esame (24 immagini, fig1-fig24)
+    └── assets/                     # 24 figure esame (fig1-fig24)
 ```
 
-### Cosa è già stato fatto
+### Funzionalità completate
 - [x] Estrazione 882 domande da Esame_VDS.java (125+107+142+243+34+49+81+25+76)
-- [x] Configurazione Expo SDK 54 (expo ~54.0.33, react-native 0.81.5, React 19.1.0)
-- [x] Conversione da class a functional components (React hooks: useState, useCallback, useMemo)
-- [x] Fix bug userAnswer 'X' vs null (coerente con sorgente Java)
-- [x] Fix import/export tra componenti
-- [x] Copia immagini figure (24 immagini, fig1-fig24)
-- [x] Visualizzazione immagini nelle domande con figura (figureMap statica)
-- [x] Fix SafeAreaView deprecato → View + Platform.OS
-- [x] Fix Android nav bar sovrapposizione (paddingBottom condizionale)
-- [x] Expo testato e funzionante su dispositivo fisico
+- [x] Expo SDK 54 (expo ~54.0.33, react-native 0.81.5, React 19.1.0)
+- [x] Functional components con React hooks (useState, useCallback, useMemo)
+- [x] Selezione casuale domande senza duplicati (come Generazione_casuale.java)
+- [x] Navigazione Precedente/Successivo con pulsanti cliccabili
+- [x] Visualizzazione immagini figure (figureMap statica con require())
+- [x] Fix SafeAreaView deprecato → View + Platform.OS padding
+- [x] Fix Android nav bar (paddingBottom: 25px su Android, 15px su iOS)
+- [x] Risultati con IDONEO/NON IDONEO e revisione errori/non risposte
+- [x] Test completo su dispositivo fisico (70 domande → OK)
 
-### Esame Multiassi - ALA FISSA
-- Totale: 70 domande
-- Suddivisione: 10+10+12+12+4+4+6+6+6
+### Configurazione esame (Multiassi - ALA FISSA)
+- 70 domande totali: 10+10+12+12+4+4+6+6+6
 - Soglia passaggio: errate <= 7 (≤10%)
 
-### Come avviare
+### Avvio
 ```bash
-cd E:\WORK\PROVE_VARIE\Esavds\vdsexamapp
 npx expo start
 ```
-Poi scansiona il QR code con l'app **Expo Go** sul telefono.
-
-### Requisiti telefono
-- Installare **Expo Go** da Google Play Store / App Store
-- Telefono e PC sulla stessa rete WiFi
+Poi scansiona il QR code con **Expo Go** sul telefono (stessa rete WiFi del PC).
