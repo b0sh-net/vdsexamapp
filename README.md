@@ -1,6 +1,6 @@
 # VDS Exam Simulator
 
-Un'applicazione React Native per simulare l'esame VDS (Visual Distress Signal) Multiassi - Ala Fissa, con 882 domande organizzate in 9 categorie.
+Un'applicazione React Native per simulare l'esame VDS Multiassi - Ala Fissa, con 882 domande organizzate in 9 categorie.
 
 ## 📋 Descrizione
 
