@@ -52,13 +52,15 @@ vdsexamapp/
 ├── App.js                          # Entry point con navigazione
 ├── index.js                        # Punto di registrazione Expo
 ├── app.json                        # Configurazione Expo SDK 54
+├── eas.json                        # Configurazione EAS Build (APK)
 ├── package.json                    # Dipendenze e script
 ├── assets/                         # Icone e splash screen
 └── src/
     ├── components/
     │   ├── MainMenu.js             # Schermata iniziale con info esame
     │   ├── ExamScreen.js           # Simulazione esame (domanda per domanda)
-    │   └── ResultsScreen.js        # Esito IDONEO/NON IDONEO + revisione
+    │   ├── ResultsScreen.js        # Esito IDONEO/NON IDONEO + revisione
+    │   └── InfoScreen.js           # Info progetto, licenza e disclaimer
     ├── data/
     │   └── questions.json          # 882 domande in 9 categorie
     ├── utils/
@@ -87,15 +89,30 @@ Le 882 domande sono organizzate in 9 categorie:
 
 ## 🎮 Come Usare l'App
 
-1. **Schermata Principale**: Visualizza le informazioni sull'esame e il numero totale di domande
-2. **Simulazione Esame**: 
+1. **Schermata Principale**: Visualizza le informazioni sull'esame e il numero totale di domande. In fondo alla schermata trovi i pulsanti per le **Informazioni** sul progetto e il link al **repository GitHub**.
+2. **Simulazione Esame**:
    - Leggi la domanda
    - Seleziona una delle 4 risposte (A, B, C, D)
    - Naviga tra le domande con i pulsanti Precedente/Successivo
-3. **Risultati**: 
+3. **Risultati**:
    - Visualizza l'esito finale
    - Rivedi tutte le domande e le tue risposte
    - Identifica gli errori per migliorare
+4. **Informazioni**: Schermata con dettagli sul progetto, licenza GPL v3, natura no-profit e disclaimer.
+
+## 📦 Download APK
+
+L'ultimo APK Android compilato è disponibile nella sezione [**Releases**](https://github.com/b0sh-net/vdsexamapp/releases) del repository. Puoi installarlo direttamente sul tuo dispositivo Android senza bisogno di Expo Go.
+
+### Compilare l'APK in autonomia
+
+Se desideri generare tu stesso l'APK:
+
+```bash
+npx eas build --platform android --profile preview
+```
+
+Richiede un account [Expo](https://expo.dev) e la CLI `eas` configurata. La build viene eseguita sui server Expo cloud.
 
 ## 📄 Licenza
 
@@ -130,6 +147,10 @@ L'applicazione è stata completamente sviluppata con:
 - ✅ Conversione a functional components con React hooks
 - ✅ Integrazione di 28 figure esame
 - ✅ Logica di randomizzazione e calcolo risultati
+- ✅ Correzione domande corrotte (categorie con dati mancanti dal sorgente Java)
+- ✅ Validazione dati JSON all'avvio
+- ✅ Schermata Informazioni con licenza, disclaimer no-profit e link repository
+- ✅ Build APK tramite EAS Build (Expo cloud)
 
 ---
 
