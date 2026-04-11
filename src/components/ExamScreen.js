@@ -52,6 +52,16 @@ export default function ExamScreen({ onFinish_exam }) {
     [examQuestions, currentQuestionIndex]
   );
 
+  if (!currentQuestion) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ textAlign: 'center', marginTop: 100, fontSize: 18, color: '#333' }}>
+          Nessuna domanda disponibile. Verificare i dati dell'esame.
+        </Text>
+      </View>
+    );
+  }
+
   const totalQuestions = examQuestions.length;
 
   const handleAnswerSelect = useCallback(

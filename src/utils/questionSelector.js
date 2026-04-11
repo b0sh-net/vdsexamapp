@@ -1,5 +1,26 @@
 import questionsData from '../data/questions.json';
 
+// Validazione dati JSON all'avvio
+(function validateQuestions() {
+  const validKeys = ['id', 'domanda', 'risposta_a', 'risposta_b', 'esatta', 'num_risposte'];
+  Object.entries(questionsData).forEach(([catKey, questions]) => {
+    if (!Array.isArray(questions) || questions.length === 0) {
+      console.warn(`⚠️ Categoria "${catKey}": nessuna domanda disponibile`);
+      return;
+    }
+    questions.forEach((q, idx) => {
+      const issues = [];
+      if (!q.domanda || q.domanda.trim() === '') issues.push('domanda vuota');
+      if (!q.esatta || q.esatta.length === 0) issues.push('risposta esatta mancante');
+      if (q.num_risposte < 2) issues.push('numero risposte insufficiente (' + q.num_risposte + ')');
+      if (!validKeys.every(k => k in q)) issues.push('campi mancanti');
+      if (issues.length > 0) {
+        console.error(`❌ ${catKey}[${idx}] (id ${q.id}): ${issues.join(', ')}`);
+      }
+    });
+  });
+})();
+
 // Esame multiassi: 70 domande distribuite in 9 categorie
 const EXAM_CONFIG = {
   categories: [
@@ -18,6 +39,11 @@ const EXAM_CONFIG = {
 };
 
 function generateRandomIndices(poolSize, numToSelect) {
+  if (numToSelect > poolSize) {
+    throw new Error(
+      `Impossibile selezionare ${numToSelect} domande da un pool di ${poolSize}`
+    );
+  }
   const indices = [];
   for (let i = 0; i < numToSelect; i++) {
     let idx;
@@ -107,7 +133,7 @@ export function getCategoryForIndex(questionIndex) {
     }
     count += cat.numQuestions;
   }
-  return '';
+  return 'Sconosciuta';
 }
 
 export function getCategoryColor(questionIndex) {

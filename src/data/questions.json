@@ -7376,19 +7376,19 @@
       "risposta_b": "zebra, yenkee, juliett, bingo, oscar, host",
       "risposta_c": "zorro, yet, jolly, bello, over, hotel",
       "risposta_d": "zulu, yenkee, juliett, bravo, oscar, hotel",
-      "num_risposte": 0,
-      "esatta": "",
+      "num_risposte": 4,
+      "esatta": "D",
       "figura": 0
     },
     {
       "id": 19,
-      "domanda": "",
+      "domanda": "Quale segnale radiotelefonico si usa per un'emergenza?",
       "risposta_a": "MAY DAY MAY DAY MAY DAY",
       "risposta_b": "PAN PAN PAN",
       "risposta_c": "SOS",
       "risposta_d": "EMERGENZA",
       "num_risposte": 4,
-      "esatta": "D",
+      "esatta": "A",
       "figura": 0
     },
     {

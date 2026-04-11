@@ -12,6 +12,16 @@ export default function ResultsScreen({
   examResults,
   onReturnToMenu,
 }) {
+  if (!examData || !examResults) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ textAlign: 'center', marginTop: 100, fontSize: 18, color: '#333' }}>
+          Nessun risultato disponibile.
+        </Text>
+      </View>
+    );
+  }
+
   const risposteErrate = useMemo(
     () =>
       examData.filter(
