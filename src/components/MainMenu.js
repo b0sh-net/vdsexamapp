@@ -6,11 +6,13 @@ import {
   StyleSheet,
   Platform,
   StatusBar,
+  Linking,
 } from 'react-native';
 
 const TOP_PADDING = Platform.OS === 'android' ? 50 : 60;
+const REPO_URL = 'https://github.com/b0sh-net/vdsexamapp';
 
-export default function MainMenu({ onStart_exam }) {
+export default function MainMenu({ onStart_exam, onShow_info }) {
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -46,6 +48,19 @@ export default function MainMenu({ onStart_exam }) {
       <TouchableOpacity style={styles.startButton} onPress={onStart_exam}>
         <Text style={styles.startButtonText}>SIMULA ESAME</Text>
       </TouchableOpacity>
+
+      {/* Footer actions */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.footerButton} onPress={onShow_info}>
+          <Text style={styles.footerButtonText}>ℹ️ Informazioni</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.footerButton}
+          onPress={() => Linking.openURL(REPO_URL)}
+        >
+          <Text style={styles.footerButtonText}>🔗 GitHub</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -134,5 +149,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20,
+    gap: 30,
+  },
+  footerButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  footerButtonText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '500',
   },
 });

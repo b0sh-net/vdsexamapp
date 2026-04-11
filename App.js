@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import MainMenu from './src/components/MainMenu';
 import ExamScreen from './src/components/ExamScreen';
 import ResultsScreen from './src/components/ResultsScreen';
+import InfoScreen from './src/components/InfoScreen';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
@@ -26,6 +27,10 @@ export default function App() {
     setCurrentScreen('menu');
   }, []);
 
+  const handleShow_info = useCallback(() => {
+    setCurrentScreen('info');
+  }, []);
+
   switch (currentScreen) {
     case 'exam':
       return (
@@ -45,10 +50,17 @@ export default function App() {
           <StatusBar style="light" />
         </View>
       );
+    case 'info':
+      return (
+        <View style={styles.container}>
+          <InfoScreen onReturnToMenu={handleReturnToMenu} />
+          <StatusBar style="light" />
+        </View>
+      );
     default:
       return (
         <View style={styles.container}>
-          <MainMenu onStart_exam={handleStart_exam} />
+          <MainMenu onStart_exam={handleStart_exam} onShow_info={handleShow_info} />
           <StatusBar style="light" />
         </View>
       );
