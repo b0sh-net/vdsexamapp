@@ -5,11 +5,6 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#1a4d7a"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vdsexamapp"
@@ -18,7 +13,6 @@
       "adaptiveIcon": {
         "backgroundColor": "#1a4d7a"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.vdsexamapp"
     },
     "web": {

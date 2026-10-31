@@ -9,6 +9,14 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Test output
+coverage/
+jest-*.log
+
+# Local dev artifacts
+qr-*.png
+expo-*.log
+
 # Native
 .kotlin/
 *.orig.*
