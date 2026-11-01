@@ -1,12 +1,9 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Platform,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import AppButton from './ui/AppButton';
+import ScreenHeader, { HeaderAction } from './ui/ScreenHeader';
+import { colors, layout, radii, spacing, shadows } from '../theme';
+import useAppInsets from '../hooks/useAppInsets';
 
 function formatValue(value) {
   const numeric = Number(value);
@@ -20,6 +17,10 @@ function SummaryCard({ testID, value, label, highlight }) {
       style={[styles.card, highlight && styles.highlightCard]}
       testID={`${testID}-card`}
     >
+      <View
+        style={[styles.cardDot, highlight && styles.highlightDot]}
+        accessibilityElementsHidden
+      />
       <Text
         style={[styles.cardValue, highlight && styles.highlightValue]}
         testID={testID}
@@ -31,30 +32,119 @@ function SummaryCard({ testID, value, label, highlight }) {
   );
 }
 
+function CoverageSection({ coverage }) {
+  const seenCount = Number(coverage.seenCount) || 0;
+  const totalCount = Number(coverage.totalCount) || 0;
+  const remainingCount = Number(coverage.remainingCount) || 0;
+  const rawPercentage = Number(coverage.percentage) || 0;
+  const percentage = Math.max(0, Math.min(100, Math.round(rawPercentage)));
+
+  return (
+    <View style={styles.coverageCard} testID="summary-coverage">
+      <Text style={styles.coverageEyebrow}>COPERTURA ADDESTRAMENTO</Text>
+      <Text style={styles.coverageTitle}>Copertura addestramento</Text>
+      <Text
+        style={styles.coverageValue}
+        testID="summary-coverage-percentage"
+        accessibilityLabel={`Copertura addestramento: ${percentage} per cento`}
+      >
+        {`${percentage}%`}
+      </Text>
+      <Text style={styles.coverageLabel}>
+        Copertura dell&apos;archivio domande
+      </Text>
+      <View style={styles.progressTrack}>
+        <View
+          style={[styles.coverageFill, { width: `${percentage}%` }]}
+          testID="summary-coverage-bar"
+        />
+      </View>
+
+      <View style={styles.coverageStatsRow}>
+        <View style={styles.coverageStat}>
+          <Text style={styles.coverageStatValue} testID="summary-coverage-seen">
+            {formatValue(seenCount)}
+          </Text>
+          <Text style={styles.coverageStatLabel}>Incontrate</Text>
+        </View>
+        <View style={styles.coverageStat}>
+          <Text style={styles.coverageStatValue} testID="summary-coverage-total">
+            {formatValue(totalCount)}
+          </Text>
+          <Text style={styles.coverageStatLabel}>Totale</Text>
+        </View>
+        <View style={styles.coverageStat}>
+          <Text
+            style={styles.coverageStatValue}
+            testID="summary-coverage-remaining"
+          >
+            {formatValue(remainingCount)}
+          </Text>
+          <Text style={styles.coverageStatLabel}>Da vedere</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function LearningSummaryScreen({
   summary,
   onReturnToMenu,
   onStartNewSession,
 }) {
+  const { bottom } = useAppInsets();
   const hasSummary = summary && typeof summary === 'object';
+
+  const totalUnique = hasSummary ? Number(summary.totalUnique) || 0 : 0;
+  const firstAttempt = hasSummary
+    ? Number(summary.firstAttemptCorrect) || 0
+    : 0;
+  const accuracy =
+    totalUnique > 0
+      ? Math.round((firstAttempt / totalUnique) * 100)
+      : 0;
+
+  const coverage =
+    hasSummary &&
+    summary.coverage &&
+    typeof summary.coverage === 'object' &&
+    Number.isFinite(Number(summary.coverage.totalCount))
+      ? summary.coverage
+      : null;
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Riepilogo Apprendimento</Text>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={onReturnToMenu}
-          testID="summary-header-menu"
-          accessibilityRole="button"
-        >
-          <Text style={styles.menuButtonText}>MENU</Text>
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Riepilogo Apprendimento"
+        right={
+          <HeaderAction
+            label="Menu"
+            onPress={onReturnToMenu}
+            testID="summary-header-menu"
+          />
+        }
+      />
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={[styles.bodyContent, { paddingBottom: bottom }]}
+        showsVerticalScrollIndicator={false}
+      >
         {hasSummary ? (
           <>
+            <View style={styles.heroCard}>
+              <Text style={styles.heroEyebrow}>SESSIONE COMPLETATA</Text>
+              <Text style={styles.heroValue}>{accuracy}%</Text>
+              <Text style={styles.heroLabel}>
+                Risposte corrette al primo tentativo
+              </Text>
+              <View style={styles.progressTrack}>
+                <View
+                  style={[styles.progressFill, { width: `${accuracy}%` }]}
+                />
+              </View>
+            </View>
+
             <View style={styles.cardsRow}>
               <SummaryCard
                 testID="summary-total-unique"
@@ -88,14 +178,15 @@ export default function LearningSummaryScreen({
               </Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.newSessionButton}
+            {coverage && <CoverageSection coverage={coverage} />}
+
+            <AppButton
+              label="Nuova sessione"
+              variant="accent"
+              size="lg"
               onPress={onStartNewSession}
               testID="summary-new-session"
-              accessibilityRole="button"
-            >
-              <Text style={styles.newSessionButtonText}>Nuova sessione</Text>
-            </TouchableOpacity>
+            />
           </>
         ) : (
           <View style={styles.emptyBox}>
@@ -103,14 +194,14 @@ export default function LearningSummaryScreen({
           </View>
         )}
 
-        <TouchableOpacity
-          style={styles.returnButton}
+        <AppButton
+          label="Torna al menu"
+          variant="secondary"
+          size="md"
           onPress={onReturnToMenu}
           testID="summary-return-menu"
-          accessibilityRole="button"
-        >
-          <Text style={styles.returnButtonText}>Torna al menu</Text>
-        </TouchableOpacity>
+          style={styles.returnButton}
+        />
       </ScrollView>
     </View>
   );
@@ -119,119 +210,192 @@ export default function LearningSummaryScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    backgroundColor: '#1a4d7a',
-    paddingTop: Platform.OS === 'android' ? 35 : 45,
-    paddingBottom: 15,
-    paddingHorizontal: 15,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: '#fff',
-    flexShrink: 1,
-  },
-  menuButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-  },
-  menuButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: 'bold',
+    backgroundColor: colors.background,
   },
   body: {
-    padding: 15,
-    paddingBottom: Platform.OS === 'android' ? 25 : 15,
+    flex: 1,
+  },
+  bodyContent: {
+    padding: layout.screenPadding,
+  },
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...(shadows.card || {}),
+  },
+  heroEyebrow: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+  heroValue: {
+    marginTop: spacing.xs,
+    color: colors.text,
+    fontSize: 40,
+    fontWeight: '700',
+    letterSpacing: -1.2,
+  },
+  heroLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: spacing.md,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceAlt,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: radii.pill,
+    backgroundColor: colors.accent,
   },
   cardsRow: {
     flexDirection: 'row',
-    marginBottom: 10,
-    gap: 10,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   card: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
     alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 3,
+    ...(shadows.card || {}),
   },
   highlightCard: {
-    backgroundColor: '#fff8e7',
-    borderColor: '#f39c12',
+    backgroundColor: colors.warningSoft,
+    borderColor: colors.warningStrong,
+  },
+  cardDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+    marginBottom: spacing.sm,
+  },
+  highlightDot: {
+    backgroundColor: colors.warningStrong,
   },
   cardValue: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1a4d7a',
-    marginBottom: 6,
+    fontSize: 30,
+    fontWeight: '700',
+    color: colors.brand,
+    letterSpacing: -0.8,
+    marginBottom: spacing.xxs,
   },
   highlightValue: {
-    color: '#b9770e',
+    color: colors.warning,
   },
   cardLabel: {
-    fontSize: 12,
-    color: '#555',
+    fontSize: 11,
+    color: colors.textMuted,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 15,
+    fontWeight: '500',
   },
   note: {
-    backgroundColor: '#e8f4fc',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 5,
-    marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.accentSoft,
+    borderRadius: radii.md,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
+    padding: spacing.md,
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
   },
   noteText: {
+    flex: 1,
     fontSize: 13,
-    color: '#1a4d7a',
+    color: colors.brand,
     lineHeight: 19,
-    textAlign: 'center',
   },
-  newSessionButton: {
-    backgroundColor: '#2ecc71',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 10,
+  coverageCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    ...(shadows.card || {}),
   },
-  newSessionButtonText: {
-    color: '#fff',
+  coverageEyebrow: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+  coverageTitle: {
+    marginTop: spacing.xxs,
+    color: colors.text,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
+  },
+  coverageValue: {
+    marginTop: spacing.sm,
+    color: colors.brand,
+    fontSize: 34,
+    fontWeight: '700',
+    letterSpacing: -1,
+  },
+  coverageLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+    marginBottom: spacing.sm,
+  },
+  coverageFill: {
+    height: '100%',
+    borderRadius: radii.pill,
+    backgroundColor: colors.success,
+  },
+  coverageStatsRow: {
+    flexDirection: 'row',
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  coverageStat: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm,
+  },
+  coverageStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.brand,
+  },
+  coverageStatLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.textMuted,
   },
   returnButton: {
-    backgroundColor: '#1a4d7a',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  returnButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: 'bold',
+    marginTop: spacing.sm,
   },
   emptyBox: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
-    paddingVertical: 50,
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.lg,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#555',
+    fontSize: 15,
+    color: colors.textMuted,
   },
 });

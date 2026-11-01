@@ -19,7 +19,17 @@ function makeBank(count = 10, sourceKey = 'meteo') {
   };
 }
 
-function makeStorage({ pending = [], loadWarning = null, saveWarning = null, loadError = null, saveError = null } = {}) {
+function makeStorage({
+  pending = [],
+  coverage = [],
+  loadWarning = null,
+  saveWarning = null,
+  coverageWarning = null,
+  loadError = null,
+  saveError = null,
+  loadCoverageError = null,
+  saveCoverageError = null,
+} = {}) {
   return {
     loadPending: jest.fn(async () => {
       if (loadError) throw loadError;
@@ -28,6 +38,14 @@ function makeStorage({ pending = [], loadWarning = null, saveWarning = null, loa
     savePending: jest.fn(async () => {
       if (saveError) throw saveError;
       return { warning: saveWarning };
+    }),
+    loadCoverage: jest.fn(async () => {
+      if (loadCoverageError) throw loadCoverageError;
+      return { coverage, warning: coverageWarning };
+    }),
+    saveCoverage: jest.fn(async () => {
+      if (saveCoverageError) throw saveCoverageError;
+      return { warning: coverageWarning };
     }),
   };
 }
@@ -233,6 +251,8 @@ describe('LearningScreen - US3 ripasso e persistenza', () => {
     await next();
     await answer('A');
     await next();
+    await answer('A');
+    await next();
 
     expect(screen.getByTestId('learning-review-label')).toBeTruthy();
     expect(screen.getByText('Ripasso')).toBeTruthy();
@@ -306,5 +326,96 @@ describe('LearningScreen - US3 ripasso e persistenza', () => {
     });
 
     expect(screen.getByText('Arretrato non disponibile')).toBeTruthy();
+  });
+});
+
+function coverageEntry(index = 0, sourceKey = 'meteo', groupKey = 'meteo') {
+  return {
+    questionKey: `${sourceKey}:${index}`,
+    sourceKey,
+    groupKey,
+    questionId: index,
+    firstSeenAt: 100,
+    lastSeenAt: 100,
+    timesSeen: 1,
+  };
+}
+
+describe('LearningScreen - copertura', () => {
+  test('carica la copertura al mount e la passa alla sessione', async () => {
+    const { storage } = await renderLearning({
+      bank: makeBank(3),
+      storage: makeStorage({
+        coverage: [coverageEntry(0), coverageEntry(1), coverageEntry(2)],
+      }),
+    });
+
+    expect(storage.loadCoverage).toHaveBeenCalledWith(expect.any(Object));
+    expect(storage.loadPending).toHaveBeenCalledWith(expect.any(Object));
+    expect(storage.saveCoverage).toHaveBeenCalledTimes(1);
+
+    const saved = storage.saveCoverage.mock.calls[0][0];
+    expect(saved).toHaveLength(3);
+    expect(saved.filter((entry) => entry.timesSeen === 2)).toHaveLength(1);
+  });
+
+  test('salva la copertura quando il disegno la modifica', async () => {
+    const { storage } = await renderLearning({ bank: makeBank(3) });
+
+    expect(storage.saveCoverage).toHaveBeenCalledTimes(1);
+    const saved = storage.saveCoverage.mock.calls[0][0];
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toEqual(
+      expect.objectContaining({
+        questionKey: expect.any(String),
+        timesSeen: 1,
+      })
+    );
+  });
+
+  test('non salva la copertura quando il disegno non la modifica', async () => {
+    const { storage } = await renderLearning({ bank: makeBank(1) });
+
+    await answer('A');
+    await next();
+
+    expect(screen.getByTestId('learning-exhausted')).toBeTruthy();
+    expect(storage.saveCoverage).toHaveBeenCalledTimes(1);
+  });
+
+  test('avvisa ma continua se il caricamento della copertura fallisce', async () => {
+    await renderLearning({
+      storage: makeStorage({
+        loadCoverageError: new Error('copertura ko'),
+      }),
+    });
+
+    expect(screen.getByTestId('learning-storage-warning')).toBeTruthy();
+    expect(screen.getByTestId('learning-question-text')).toBeTruthy();
+  });
+
+  test('avvisa ma continua se il salvataggio della copertura fallisce', async () => {
+    await renderLearning({
+      storage: makeStorage({
+        saveCoverageError: new Error('scrittura ko'),
+      }),
+    });
+
+    expect(screen.getByTestId('learning-question-text')).toBeTruthy();
+    expect(screen.getByTestId('learning-storage-warning')).toBeTruthy();
+  });
+
+  test('include la copertura nel riepilogo finale', async () => {
+    const { onFinish } = await renderLearning({ bank: makeBank(3) });
+
+    await fireEvent.press(screen.getByTestId('learning-finish-button'));
+
+    const summary = onFinish.mock.calls[0][0];
+    expect(summary.coverage).toEqual({
+      seenCount: 1,
+      totalCount: 3,
+      remainingCount: 2,
+      percentage: 33,
+    });
   });
 });

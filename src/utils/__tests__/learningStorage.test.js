@@ -1,16 +1,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { REVIEW_INTERVAL } from '../learningEngine';
 import {
   STORAGE_KEY,
   STORAGE_VERSION,
   STORAGE_WARNING,
+  COVERAGE_STORAGE_KEY,
+  COVERAGE_STORAGE_VERSION,
+  COVERAGE_WARNING,
   loadPending,
   savePending,
   normalizePending,
+  loadCoverage,
+  saveCoverage,
+  normalizeCoverage,
 } from '../learningStorage';
 import {
   makeBank,
   makeQuestion,
   makePendingEntry,
+  makeCoverageEntry,
   createFakeClock,
 } from './helpers';
 
@@ -190,6 +198,28 @@ describe('learningStorage', () => {
     expect(entry.wrongCount).toBe(1);
   });
 
+  test('conserva il contatore delle nuove domande affrontate dopo un errore', async () => {
+    const entry = validEntry({ newSinceWrong: 1 });
+    await savePending([entry]);
+
+    const payload = JSON.parse(await AsyncStorage.getItem(STORAGE_KEY));
+    expect(payload.pending[0].newSinceWrong).toBe(1);
+
+    const loaded = await loadPending(makeBank());
+    expect(loaded.pending[0].newSinceWrong).toBe(1);
+  });
+
+  test('considera mature le voci legacy prive del contatore', () => {
+    const legacy = validEntry();
+    delete legacy.newSinceWrong;
+
+    const result = normalizePending([legacy], makeBank());
+
+    expect(result.pending).toHaveLength(1);
+    expect(result.pending[0].newSinceWrong).toBe(REVIEW_INTERVAL);
+    expect(result.changed).toBe(true);
+  });
+
   test('restituisce un avviso non bloccante se la lettura fallisce', async () => {
     AsyncStorage.getItem.mockRejectedValueOnce(new Error('lettura ko'));
 
@@ -355,5 +385,200 @@ describe('learningStorage', () => {
     const payload = JSON.parse(await AsyncStorage.getItem(STORAGE_KEY));
     expect(payload.pending).toHaveLength(1);
     expect(payload.pending[0].questionKey).toBe('norme:0');
+  });
+});
+
+describe('learningStorage - copertura', () => {
+  async function writeCoveragePayload(payload) {
+    await AsyncStorage.setItem(COVERAGE_STORAGE_KEY, JSON.stringify(payload));
+  }
+
+  function validCoverage(overrides = {}) {
+    return makeCoverageEntry({
+      questionKey: 'norme:0',
+      sourceKey: 'norme',
+      groupKey: 'circolazione',
+      questionId: 0,
+      firstSeenAt: 1000,
+      lastSeenAt: 1100,
+      timesSeen: 2,
+      ...overrides,
+    });
+  }
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    jest.clearAllMocks();
+  });
+
+  test('usa chiave e versione dedicate alla copertura', () => {
+    expect(COVERAGE_STORAGE_KEY).toBe('@vds/learning/coverage/v1');
+    expect(COVERAGE_STORAGE_VERSION).toBe(1);
+    expect(typeof COVERAGE_WARNING).toBe('string');
+  });
+
+  test('esegue un round-trip valido con il payload atteso', async () => {
+    const bank = makeBank();
+    const entry = validCoverage();
+
+    const saved = await saveCoverage([entry]);
+    expect(saved).toEqual({ warning: null });
+
+    const raw = await AsyncStorage.getItem(COVERAGE_STORAGE_KEY);
+    const payload = JSON.parse(raw);
+    expect(payload.version).toBe(1);
+    expect(typeof payload.updatedAt).toBe('number');
+    expect(payload.coverage).toEqual([entry]);
+
+    const loaded = await loadCoverage(bank, () => 5000);
+    expect(loaded).toEqual({ coverage: [entry], warning: null });
+  });
+
+  test('restituisce un elenco vuoto senza avviso quando non esiste nulla', async () => {
+    const loaded = await loadCoverage(makeBank());
+
+    expect(loaded).toEqual({ coverage: [], warning: null });
+  });
+
+  test('resetta i dati con JSON corrotto', async () => {
+    await AsyncStorage.setItem(COVERAGE_STORAGE_KEY, '{non-json');
+
+    const loaded = await loadCoverage(makeBank());
+
+    expect(loaded.coverage).toEqual([]);
+    expect(loaded.warning).toBe(COVERAGE_WARNING);
+
+    const rewritten = JSON.parse(await AsyncStorage.getItem(COVERAGE_STORAGE_KEY));
+    expect(rewritten.coverage).toEqual([]);
+  });
+
+  test('resetta i dati con versione non supportata', async () => {
+    await writeCoveragePayload({
+      version: 2,
+      updatedAt: 1,
+      coverage: [validCoverage()],
+    });
+
+    const loaded = await loadCoverage(makeBank());
+
+    expect(loaded.coverage).toEqual([]);
+    expect(loaded.warning).toBe(COVERAGE_WARNING);
+  });
+
+  test('resetta i dati quando coverage non e un array', async () => {
+    await writeCoveragePayload({ version: 1, updatedAt: 1, coverage: {} });
+
+    const loaded = await loadCoverage(makeBank());
+
+    expect(loaded.coverage).toEqual([]);
+    expect(loaded.warning).toBe(COVERAGE_WARNING);
+  });
+
+  test('scarta le voci orfane e ricalcola i campi derivati', async () => {
+    await writeCoveragePayload({
+      version: 1,
+      updatedAt: 1,
+      coverage: [
+        validCoverage({ questionKey: 'sconosciuta:0' }),
+        validCoverage({
+          questionKey: 'meteo:0',
+          sourceKey: 'meteo',
+          groupKey: 'aerodinamica',
+        }),
+      ],
+    });
+
+    const loaded = await loadCoverage(makeBank());
+
+    expect(loaded.coverage).toHaveLength(1);
+    expect(loaded.coverage[0]).toEqual(
+      makeCoverageEntry({
+        questionKey: 'meteo:0',
+        sourceKey: 'meteo',
+        groupKey: 'meteo',
+        questionId: 0,
+        firstSeenAt: 1000,
+        lastSeenAt: 1100,
+        timesSeen: 2,
+      })
+    );
+  });
+
+  test('unisce i duplicati e ordina per questionKey', async () => {
+    await writeCoveragePayload({
+      version: 1,
+      updatedAt: 1,
+      coverage: [
+        validCoverage({
+          questionKey: 'norme:1',
+          questionId: 1,
+          firstSeenAt: 100,
+          lastSeenAt: 200,
+          timesSeen: 1,
+        }),
+        validCoverage({
+          questionKey: 'norme:0',
+          firstSeenAt: 300,
+          lastSeenAt: 400,
+          timesSeen: 3,
+        }),
+        validCoverage({
+          questionKey: 'norme:0',
+          firstSeenAt: 50,
+          lastSeenAt: 500,
+          timesSeen: 4,
+        }),
+      ],
+    });
+
+    const loaded = await loadCoverage(makeBank());
+
+    expect(loaded.coverage.map((entry) => entry.questionKey)).toEqual([
+      'norme:0',
+      'norme:1',
+    ]);
+    expect(loaded.coverage[0]).toEqual(
+      makeCoverageEntry({
+        questionKey: 'norme:0',
+        firstSeenAt: 50,
+        lastSeenAt: 500,
+        timesSeen: 4,
+      })
+    );
+  });
+
+  test('ripara i timestamp mancanti usando il clock iniettato', async () => {
+    await writeCoveragePayload({
+      version: 1,
+      updatedAt: 1,
+      coverage: [
+        makeCoverageEntry({
+          questionKey: 'norme:0',
+          firstSeenAt: undefined,
+          lastSeenAt: undefined,
+          timesSeen: 0,
+        }),
+      ],
+    });
+
+    const loaded = await loadCoverage(makeBank(), () => 999);
+
+    expect(loaded.coverage[0].firstSeenAt).toBe(999);
+    expect(loaded.coverage[0].lastSeenAt).toBe(999);
+    expect(loaded.coverage[0].timesSeen).toBe(1);
+  });
+
+  test('condivide la coda seriale con savePending', async () => {
+    const pending = makePendingEntry();
+    const coverage = validCoverage();
+
+    await Promise.all([savePending([pending]), saveCoverage([coverage])]);
+
+    const pendingPayload = JSON.parse(await AsyncStorage.getItem(STORAGE_KEY));
+    const coveragePayload = JSON.parse(
+      await AsyncStorage.getItem(COVERAGE_STORAGE_KEY)
+    );
+    expect(pendingPayload.pending).toEqual([pending]);
+    expect(coveragePayload.coverage).toEqual([coverage]);
   });
 });

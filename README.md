@@ -31,9 +31,27 @@ Questa applicazione replica la funzionalità dell'originale applicazione Java VD
 | Circolazione aerea (norme + navigazione + legislazione) | 10 | 9,1% |
 | Sicurezza | 10 | 9,1% |
 
-- Le domande sbagliate vengono salvate **solo sul dispositivo** e riproposte dopo ogni 3 nuove domande, finché non ricevono la risposta corretta.
+- Le domande sbagliate vengono salvate **solo sul dispositivo** e riproposte solo dopo **altre 3 nuove domande** (la domanda sbagliata non conta nel conteggio), finché non ricevono la risposta corretta.
 - L'arretrato sopravvive alla chiusura e riapertura dell'app (chiave storage `@vds/learning/pending/v1`).
 - Alla fine della sessione il riepilogo mostra: domande totali uniche, corrette al primo tentativo, sbagliate successivamente corrette e sbagliate non ancora corrette (intero arretrato persistente).
+
+### Copertura cumulativa dell'addestramento
+
+- Ogni domanda **mostrata** in Apprendimento viene registrata una sola volta, anche se non viene risposta.
+- La copertura è cumulativa tra tutte le sessioni e sopravvive alla chiusura dell'app (chiave storage `@vds/learning/coverage/v1`).
+- Il riepilogo di fine sessione mostra la percentuale di copertura dell'intero archivio (882 domande), con il numero di domande **incontrate**, il **totale** e quelle **da vedere**.
+- La copertura considera sia le domande nuove sia i ripassi; risposte corrette o sbagliate non modificano la copertura, che viene aggiornata al momento del disegno della domanda.
+
+### Dati di addestramento (esporta/importa)
+
+Dalla schermata **Informazioni** è possibile gestire un unico file di backup con copertura e arretrato:
+
+- **Esporta dati**: produce un file JSON `vds-addestramento-YYYYMMDD-HHmmss.json` con formato versionato (`format: "vds-training-data"`, `version: 1`), condivisibile tramite il pannello di condivisione del sistema. L'esportazione non modifica i dati locali.
+- **Importa dati**: legge un file esportato da un altro dispositivo o da un backup e lo unisce ai dati locali.
+- L'unione è **non distruttiva** e **monotona**: `firstSeenAt`/`firstWrongAt` minimi, `lastSeenAt`/`lastWrongAt`/`lastProposedAt`/`timesSeen`/`wrongCount`/`newSinceWrong` massimi; nessun progresso locale viene perso.
+- L'importazione è **atomica**: un file non valido, di versione non supportata o con domande non presenti nell'archivio non modifica alcun dato locale.
+- L'importazione è **idempotente**: applicare due volte lo stesso file non aggiunge duplicati e lascia i contatori a zero alla seconda applicazione.
+- Se il file contiene voci di arretrato non presenti nella copertura, le relative domande vengono aggiunte automaticamente alla copertura.
 
 ## 🚀 Come Avviare
 
@@ -104,8 +122,10 @@ vdsexamapp/
     │   └── questions.json          # 882 domande in 9 categorie
     ├── utils/
     │   ├── questionSelector.js     # Selezione casuale esame e calcolo risultati
-    │   ├── learningEngine.js       # Motore puro: pesi, ripassi, statistiche
-    │   ├── learningStorage.js      # Persistenza locale dell'arretrato
+    │   ├── learningEngine.js       # Motore puro: pesi, ripassi, copertura, statistiche
+    │   ├── learningStorage.js      # Persistenza locale di arretrato e copertura
+    │   ├── trainingTransfer.js     # Formato di esportazione, parsing e merge dei dati
+    │   ├── trainingBackup.js       # Adapter I/O: file, condivisione e selezione documento
     │   ├── figureMap.js            # Mappa condivisa delle figure 1-24
     │   └── __tests__/              # Test di motore, storage e regressione esame
     └── assets/                     # Figure esame (28 immagini)
@@ -117,7 +137,8 @@ vdsexamapp/
 - **React**: 19.3.0
 - **Expo SDK**: 58.0.22
 - **JavaScript (ES6+)**
-- **AsyncStorage**: `@react-native-async-storage/async-storage` per l'arretrato locale
+- **AsyncStorage**: `@react-native-async-storage/async-storage` per arretrato e copertura locale
+- **File e condivisione**: `expo-file-system`, `expo-sharing`, `expo-document-picker` per esportazione/importazione
 - **Test**: Jest, jest-expo, React Native Testing Library
 
 ## 📚 Categorie di Domande
@@ -148,7 +169,7 @@ Le 882 domande sono organizzate in 9 categorie:
    - Tocca **Apprendimento** nel menu principale
    - Rispondi alle domande senza un totale prefissato: l'esito appare subito e la risposta resta bloccata
    - Usa **Avanti** per proseguire e **Termina** per chiudere la sessione (con conferma se hai già risposto)
-   - Le domande sbagliate vengono riproposte automaticamente dopo 3 nuove domande e restano salvate sul dispositivo
+   - Le domande sbagliate vengono riproposte automaticamente solo dopo altre 3 nuove domande e restano salvate sul dispositivo
    - Alla fine vedi il riepilogo con le quattro statistiche richieste
 5. **Informazioni**: Schermata con dettagli sul progetto, licenza GPL v3, natura no-profit e disclaimer.
 
@@ -179,7 +200,9 @@ npm test -- --runInBand -t "riepilogo|summary"
 5. Correggi la domanda di ripasso: il contatore diminuisce.
 6. Sbaglia di nuovo, chiudi e riapri l'app: la domanda è ancora in arretrato.
 7. Termina la sessione: verifica le quattro card del riepilogo e i pulsanti **Nuova sessione** / **Torna al menu**.
-8. Dal menu verifica che **SIMULA ESAME** continui a generare 70 domande in 9 categorie.
+8. Verifica la card **Copertura addestramento**: percentuale, domande incontrate, totale e da vedere; avvia una nuova sessione e controlla che la copertura cresca.
+9. Da **Informazioni > Dati di addestramento** esporta il file e verifica che i dati locali restino invariati; importa un file valido e controlla che copertura e arretrato siano uniti senza perdite.
+10. Dal menu verifica che **SIMULA ESAME** continui a generare 70 domande in 9 categorie.
 
 ## 📦 Download APK
 
@@ -233,11 +256,13 @@ L'applicazione è stata completamente sviluppata con:
 - ✅ Validazione dati JSON all'avvio
 - ✅ Modalità Apprendimento con estrazione pesata, feedback immediato, ripasso automatico e persistenza locale
 - ✅ Riepilogo di sessione con quattro statistiche e arretrato persistente
+- ✅ Copertura cumulativa delle domande incontrate, persistente tra sessioni
+- ✅ Esportazione e importazione non distruttiva di copertura e arretrato in un file JSON
 - ✅ Suite di test automatici (Jest + React Native Testing Library) e regressione dell'esame
 - ✅ Schermata Informazioni con licenza, disclaimer no-profit e link repository
 - ✅ Build APK tramite EAS Build (Expo cloud)
 
 ---
 
-**Versione**: 1.0.0  
-**Ultimo aggiornamento**: 2026-10-31
+**Versione**: 2.0.0  
+**Ultimo aggiornamento**: 2026-11-01

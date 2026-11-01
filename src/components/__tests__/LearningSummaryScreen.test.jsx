@@ -116,3 +116,124 @@ describe('LearningSummaryScreen', () => {
     expect(props.onReturnToMenu).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('LearningSummaryScreen - copertura', () => {
+  const COVERAGE = {
+    seenCount: 120,
+    totalCount: 882,
+    remainingCount: 762,
+    percentage: 14,
+  };
+
+  test('mostra la sezione copertura con valori e barra proporzionale', async () => {
+    await renderScreen({ summary: { ...SUMMARY, coverage: COVERAGE } });
+
+    expect(screen.getByText('Copertura addestramento')).toBeTruthy();
+    expect(screen.getByText("Copertura dell'archivio domande")).toBeTruthy();
+    expect(screen.getByText('Incontrate')).toBeTruthy();
+    expect(screen.getByText('Totale')).toBeTruthy();
+    expect(screen.getByText('Da vedere')).toBeTruthy();
+
+    expect(screen.getByTestId('summary-coverage-percentage').props.children).toBe(
+      '14%'
+    );
+    expect(screen.getByTestId('summary-coverage-seen').props.children).toBe('120');
+    expect(screen.getByTestId('summary-coverage-total').props.children).toBe('882');
+    expect(screen.getByTestId('summary-coverage-remaining').props.children).toBe(
+      '762'
+    );
+
+    const bar = StyleSheet.flatten(
+      screen.getByTestId('summary-coverage-bar').props.style
+    );
+    expect(bar.width).toBe('14%');
+    expect(
+      screen.getByTestId('summary-coverage-percentage').props.accessibilityLabel
+    ).toBe('Copertura addestramento: 14 per cento');
+  });
+
+  test('mostra 100% senza messaggi speciali', async () => {
+    await renderScreen({
+      summary: {
+        ...SUMMARY,
+        coverage: {
+          seenCount: 882,
+          totalCount: 882,
+          remainingCount: 0,
+          percentage: 100,
+        },
+      },
+    });
+
+    expect(screen.getByTestId('summary-coverage-percentage').props.children).toBe(
+      '100%'
+    );
+    expect(screen.getByTestId('summary-coverage-remaining').props.children).toBe(
+      '0'
+    );
+    const bar = StyleSheet.flatten(
+      screen.getByTestId('summary-coverage-bar').props.style
+    );
+    expect(bar.width).toBe('100%');
+  });
+
+  test('gestisce archivio vuoto con valori a zero', async () => {
+    await renderScreen({
+      summary: {
+        ...SUMMARY,
+        coverage: {
+          seenCount: 0,
+          totalCount: 0,
+          remainingCount: 0,
+          percentage: 0,
+        },
+      },
+    });
+
+    expect(screen.getByTestId('summary-coverage-percentage').props.children).toBe(
+      '0%'
+    );
+    expect(screen.getByTestId('summary-coverage-seen').props.children).toBe('0');
+    expect(screen.getByTestId('summary-coverage-total').props.children).toBe('0');
+    expect(screen.getByTestId('summary-coverage-remaining').props.children).toBe(
+      '0'
+    );
+  });
+
+  test('limita la barra tra 0 e 100', async () => {
+    await renderScreen({
+      summary: {
+        ...SUMMARY,
+        coverage: {
+          seenCount: 5,
+          totalCount: 10,
+          remainingCount: 5,
+          percentage: 140,
+        },
+      },
+    });
+
+    const bar = StyleSheet.flatten(
+      screen.getByTestId('summary-coverage-bar').props.style
+    );
+    expect(bar.width).toBe('100%');
+  });
+
+  test('non mostra la sezione quando il riepilogo non ha copertura', async () => {
+    await renderScreen();
+
+    expect(screen.queryByTestId('summary-coverage')).toBeNull();
+    expect(screen.queryByTestId('summary-coverage-percentage')).toBeNull();
+  });
+
+  test('mantiene invariate le quattro card esistenti', async () => {
+    await renderScreen({ summary: { ...SUMMARY, coverage: COVERAGE } });
+
+    expect(screen.getByTestId('summary-total-unique').props.children).toBe('12');
+    expect(screen.getByTestId('summary-first-attempt').props.children).toBe('7');
+    expect(screen.getByTestId('summary-later-corrected').props.children).toBe(
+      '3'
+    );
+    expect(screen.getByTestId('summary-still-pending').props.children).toBe('4');
+  });
+});

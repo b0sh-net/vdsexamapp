@@ -2,17 +2,18 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   ScrollView,
   StyleSheet,
   Alert,
-  Platform,
   Image,
   ActivityIndicator,
 } from 'react-native';
 import questionsData from '../data/questions.json';
 import figureMap from '../utils/figureMap';
-import learningStorage, { STORAGE_WARNING } from '../utils/learningStorage';
+import learningStorage, {
+  STORAGE_WARNING,
+  COVERAGE_WARNING,
+} from '../utils/learningStorage';
 import {
   createSession,
   drawNextQuestion,
@@ -20,6 +21,11 @@ import {
   getSessionSummary,
   getQuestionOptions,
 } from '../utils/learningEngine';
+import AnswerOption from './ui/AnswerOption';
+import AppButton from './ui/AppButton';
+import ScreenHeader, { HeaderAction } from './ui/ScreenHeader';
+import { colors, layout, radii, spacing, shadows } from '../theme';
+import useAppInsets from '../hooks/useAppInsets';
 
 const EXHAUSTED_MESSAGE =
   'Nessuna domanda disponibile. Termina la sessione per vedere il riepilogo.';
@@ -32,6 +38,7 @@ export default function LearningScreen({
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [storageWarning, setStorageWarning] = useState(null);
+  const { bottom } = useAppInsets();
   const answerLock = useRef(false);
   const finishedRef = useRef(false);
   const mountedRef = useRef(true);
@@ -48,20 +55,39 @@ export default function LearningScreen({
 
     const load = async () => {
       let pending = [];
+      let coverage = [];
       let warning = null;
-      try {
-        const stored = await storageAdapter.loadPending(questionBank);
-        if (stored) {
-          if (Array.isArray(stored.pending)) pending = stored.pending;
-          warning = stored.warning || null;
+
+      const pendingLoad = (async () => {
+        try {
+          const stored = await storageAdapter.loadPending(questionBank);
+          if (stored) {
+            if (Array.isArray(stored.pending)) pending = stored.pending;
+            if (stored.warning) warning = stored.warning;
+          }
+        } catch (error) {
+          warning = STORAGE_WARNING;
         }
-      } catch (error) {
-        warning = STORAGE_WARNING;
-      }
+      })();
+
+      const coverageLoad = (async () => {
+        if (typeof storageAdapter.loadCoverage !== 'function') return;
+        try {
+          const stored = await storageAdapter.loadCoverage(questionBank);
+          if (stored) {
+            if (Array.isArray(stored.coverage)) coverage = stored.coverage;
+            if (stored.warning && !warning) warning = stored.warning;
+          }
+        } catch (error) {
+          if (!warning) warning = COVERAGE_WARNING;
+        }
+      })();
+
+      await Promise.all([pendingLoad, coverageLoad]);
 
       if (cancelled) return;
 
-      const base = createSession({ bank: questionBank, pending });
+      const base = createSession({ bank: questionBank, pending, coverage });
       const drawn = drawNextQuestion(base);
       answerLock.current = false;
 
@@ -75,6 +101,19 @@ export default function LearningScreen({
           })
           .catch(() => {
             if (!cancelled) setStorageWarning(STORAGE_WARNING);
+          });
+      }
+
+      if (drawn.coverageChanged && typeof storageAdapter.saveCoverage === 'function') {
+        storageAdapter
+          .saveCoverage(Array.from(drawn.session.coverage.values()))
+          .then((result) => {
+            if (!cancelled && result && result.warning) {
+              setStorageWarning(result.warning);
+            }
+          })
+          .catch(() => {
+            if (!cancelled) setStorageWarning(COVERAGE_WARNING);
           });
       }
 
@@ -98,6 +137,20 @@ export default function LearningScreen({
         if (result && result.warning) setStorageWarning(result.warning);
       } catch (error) {
         if (mountedRef.current) setStorageWarning(STORAGE_WARNING);
+      }
+    },
+    [storageAdapter]
+  );
+
+  const persistCoverage = useCallback(
+    async (coverage) => {
+      if (typeof storageAdapter.saveCoverage !== 'function') return;
+      try {
+        const result = await storageAdapter.saveCoverage(coverage);
+        if (!mountedRef.current) return;
+        if (result && result.warning) setStorageWarning(result.warning);
+      } catch (error) {
+        if (mountedRef.current) setStorageWarning(COVERAGE_WARNING);
       }
     },
     [storageAdapter]
@@ -134,7 +187,10 @@ export default function LearningScreen({
     if (result.pendingRevisionChanged) {
       persistPending(result.session.pending);
     }
-  }, [session, storageWarning, persistPending]);
+    if (result.coverageChanged) {
+      persistCoverage(Array.from(result.session.coverage.values()));
+    }
+  }, [session, storageWarning, persistPending, persistCoverage]);
 
   const finish = useCallback(() => {
     if (!session || finishedRef.current) return;
@@ -166,7 +222,7 @@ export default function LearningScreen({
     return (
       <View style={styles.container}>
         <View style={styles.loadingBox} testID="learning-loading">
-          <ActivityIndicator size="large" color="#1a4d7a" />
+          <ActivityIndicator size="large" color={colors.brand} />
           <Text style={styles.loadingText}>Caricamento...</Text>
         </View>
       </View>
@@ -180,31 +236,34 @@ export default function LearningScreen({
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <Text style={styles.headerTitle}>Apprendimento</Text>
-          <TouchableOpacity
-            style={styles.finishButton}
+      <ScreenHeader
+        title="Apprendimento"
+        right={
+          <HeaderAction
+            label="Termina"
             onPress={handleFinish}
             testID="learning-finish-button"
-            accessibilityRole="button"
             accessibilityLabel="Termina la sessione di apprendimento"
-          >
-            <Text style={styles.finishButtonText}>Termina</Text>
-          </TouchableOpacity>
+            tone="danger"
+          />
+        }
+      >
+        <View style={styles.countersRow}>
+          <View style={styles.counterChip}>
+            <Text style={styles.counterText}>
+              {`Domande affrontate: ${session.answeredCount}`}
+            </Text>
+          </View>
+          <View style={[styles.counterChip, styles.pendingChip]}>
+            <Text style={styles.pendingText} testID="learning-pending-count">
+              {'Da ripassare: '}
+              {session.pending.length}
+            </Text>
+          </View>
         </View>
-        <View style={styles.headerRow}>
-          <Text style={styles.answeredCount}>
-            {'Domande affrontate: '}
-            {session.answeredCount}
-          </Text>
-          <Text style={styles.pendingCount} testID="learning-pending-count">
-            {'Da ripassare: '}
-            {session.pending.length}
-          </Text>
-        </View>
-        <View style={styles.headerRow}>
-          <Text style={styles.groupLabel}>
+
+        <View style={styles.groupRow}>
+          <Text style={styles.groupLabel} numberOfLines={1}>
             {current ? current.groupLabel : 'Sessione conclusa'}
           </Text>
           {current && current.source === 'review' && (
@@ -215,17 +274,25 @@ export default function LearningScreen({
             </View>
           )}
         </View>
-      </View>
+      </ScreenHeader>
 
-      <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        showsVerticalScrollIndicator={false}
+      >
         {storageWarning && (
           <View style={styles.warningBanner} testID="learning-storage-warning">
+            <Text style={styles.warningIcon}>!</Text>
             <Text style={styles.warningText}>{storageWarning}</Text>
           </View>
         )}
 
         {session.phase === 'exhausted' || !current ? (
-          <View style={styles.exhaustedBox}>
+          <View style={styles.exhaustedCard}>
+            <View style={styles.exhaustedIcon}>
+              <Text style={styles.exhaustedIconGlyph}>{'\u2713'}</Text>
+            </View>
             <Text style={styles.exhaustedTitle}>Archivio esaurito</Text>
             <Text style={styles.exhaustedText} testID="learning-exhausted">
               {EXHAUSTED_MESSAGE}
@@ -235,7 +302,7 @@ export default function LearningScreen({
           <>
             {current.question.figura > 0 &&
               figureMap[current.question.figura] && (
-                <View style={styles.figureContainer}>
+                <View style={styles.figureCard}>
                   <Image
                     source={figureMap[current.question.figura]}
                     style={styles.figureImage}
@@ -244,9 +311,11 @@ export default function LearningScreen({
                 </View>
               )}
 
-            <Text style={styles.questionText} testID="learning-question-text">
-              {current.question.domanda}
-            </Text>
+            <View style={styles.questionCard}>
+              <Text style={styles.questionText} testID="learning-question-text">
+                {current.question.domanda}
+              </Text>
+            </View>
 
             <View style={styles.answersContainer}>
               {options.map((option) => {
@@ -258,39 +327,23 @@ export default function LearningScreen({
                   option.key === feedback.selectedAnswer;
 
                 return (
-                  <TouchableOpacity
+                  <AnswerOption
                     key={option.key}
                     testID={`learning-option-${option.key}`}
-                    style={[
-                      styles.answerOption,
-                      isCorrectOption && styles.correctOption,
-                      isWrongSelection && styles.wrongOption,
-                    ]}
+                    label={option.key}
+                    text={option.text}
+                    state={
+                      isCorrectOption
+                        ? 'correct'
+                        : isWrongSelection
+                          ? 'wrong'
+                          : 'default'
+                    }
                     onPress={() => handleSelect(option.key)}
                     disabled={isFeedback}
-                    accessibilityRole="button"
                     accessibilityLabel={`${option.key}) ${option.text}`}
                     accessibilityState={{ disabled: isFeedback }}
-                  >
-                    <Text
-                      style={[
-                        styles.answerLabel,
-                        isCorrectOption && styles.correctOptionText,
-                        isWrongSelection && styles.wrongOptionText,
-                      ]}
-                    >
-                      {option.key}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.answerText,
-                        isCorrectOption && styles.correctOptionText,
-                        isWrongSelection && styles.wrongOptionText,
-                      ]}
-                    >
-                      {option.text}
-                    </Text>
-                  </TouchableOpacity>
+                  />
                 );
               })}
             </View>
@@ -307,43 +360,61 @@ export default function LearningScreen({
                 accessibilityLiveRegion="polite"
                 accessibilityRole="alert"
               >
-                <Text style={styles.feedbackTitle}>
-                  {feedback.correct ? 'Corretto' : 'Sbagliato'}
-                </Text>
-                {!feedback.correct && (
+                <View
+                  style={[
+                    styles.feedbackIcon,
+                    feedback.correct
+                      ? styles.feedbackIconCorrect
+                      : styles.feedbackIconWrong,
+                  ]}
+                >
                   <Text
-                    style={styles.correctAnswerText}
-                    testID="learning-correct-answer"
+                    style={[
+                      styles.feedbackIconGlyph,
+                      feedback.correct
+                        ? styles.feedbackIconGlyphCorrect
+                        : styles.feedbackIconGlyphWrong,
+                    ]}
                   >
-                    {'Risposta corretta: '}
-                    {feedback.correctAnswer}) {feedback.correctAnswerText}
+                    {feedback.correct ? '\u2713' : '\u2715'}
                   </Text>
-                )}
+                </View>
+                <View style={styles.feedbackContent}>
+                  <Text style={styles.feedbackTitle}>
+                    {feedback.correct ? 'Corretto' : 'Sbagliato'}
+                  </Text>
+                  {!feedback.correct && (
+                    <Text
+                      style={styles.correctAnswerText}
+                      testID="learning-correct-answer"
+                    >
+                      {'Risposta corretta: '}
+                      {feedback.correctAnswer}) {feedback.correctAnswerText}
+                    </Text>
+                  )}
+                </View>
               </View>
             )}
           </>
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: bottom }]}>
         {session.phase === 'feedback' ? (
-          <TouchableOpacity
-            style={styles.nextButton}
+          <AppButton
+            label="Avanti"
+            variant="primary"
             onPress={handleNext}
             testID="learning-next-button"
-            accessibilityRole="button"
-          >
-            <Text style={styles.nextButtonText}>Avanti</Text>
-          </TouchableOpacity>
+            icon={'\u203A'}
+          />
         ) : session.phase === 'exhausted' ? (
-          <TouchableOpacity
-            style={styles.nextButton}
+          <AppButton
+            label="Termina sessione"
+            variant="primary"
             onPress={handleFinish}
             testID="learning-finish-session-button"
-            accessibilityRole="button"
-          >
-            <Text style={styles.nextButtonText}>Termina sessione</Text>
-          </TouchableOpacity>
+          />
         ) : (
           <View style={styles.footerHint}>
             <Text style={styles.footerHintText}>
@@ -359,7 +430,7 @@ export default function LearningScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
   },
   loadingBox: {
     flex: 1,
@@ -367,218 +438,227 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loadingText: {
-    marginTop: 15,
-    fontSize: 16,
-    color: '#1a4d7a',
-  },
-  header: {
-    backgroundColor: '#1a4d7a',
-    paddingTop: Platform.OS === 'android' ? 35 : 45,
-    paddingBottom: 10,
-    paddingHorizontal: 15,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  finishButton: {
-    backgroundColor: '#e74c3c',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-  },
-  finishButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  answeredCount: {
-    fontSize: 14,
-    color: '#e0e0e0',
-  },
-  pendingCount: {
-    fontSize: 14,
-    color: '#f5c542',
+    marginTop: spacing.md,
+    fontSize: 15,
+    color: colors.textMuted,
     fontWeight: '500',
   },
+  countersRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  counterChip: {
+    flex: 1,
+    backgroundColor: colors.onBrandFaint,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  pendingChip: {
+    backgroundColor: 'rgba(224,138,0,0.20)',
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  counterText: {
+    color: colors.onBrand,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  pendingText: {
+    color: '#FFD08A',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  groupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
   groupLabel: {
+    flexShrink: 1,
+    color: colors.onBrandMuted,
     fontSize: 13,
-    color: '#a0c8e0',
-    fontStyle: 'italic',
+    fontWeight: '500',
   },
   reviewBadge: {
-    backgroundColor: '#f39c12',
-    borderRadius: 10,
-    paddingVertical: 2,
+    marginLeft: spacing.sm,
+    backgroundColor: colors.warningStrong,
+    borderRadius: radii.pill,
+    paddingVertical: 3,
     paddingHorizontal: 10,
   },
   reviewBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    color: colors.onBrand,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   body: {
     flex: 1,
   },
   bodyContent: {
-    paddingBottom: 15,
+    padding: layout.screenPadding,
+    paddingBottom: spacing.xl,
   },
   warningBanner: {
-    backgroundColor: '#fdf3d8',
-    borderLeftWidth: 4,
-    borderLeftColor: '#f39c12',
-    padding: 10,
-    marginHorizontal: 15,
-    marginTop: 10,
-    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.warningSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(185,119,14,0.24)',
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  warningIcon: {
+    color: colors.warning,
+    fontSize: 16,
+    fontWeight: '800',
+    marginRight: spacing.sm,
+    marginTop: -1,
   },
   warningText: {
-    color: '#8a6d1b',
+    flex: 1,
+    color: '#7A5410',
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 19,
   },
-  exhaustedBox: {
+  exhaustedCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
-    paddingHorizontal: 25,
-    paddingTop: 60,
+    ...(shadows.card || {}),
+  },
+  exhaustedIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.successSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  exhaustedIconGlyph: {
+    color: colors.success,
+    fontSize: 23,
+    fontWeight: '700',
   },
   exhaustedTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1a4d7a',
-    marginBottom: 10,
+    fontSize: 19,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   exhaustedText: {
-    fontSize: 15,
-    color: '#555',
+    fontSize: 14,
+    color: colors.textMuted,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 21,
   },
-  figureContainer: {
-    alignItems: 'center',
-    padding: 10,
-    backgroundColor: '#e8f4fc',
-    marginHorizontal: 15,
-    marginTop: 10,
-    borderRadius: 8,
+  figureCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
   },
   figureImage: {
     width: '100%',
     height: 200,
-    borderRadius: 8,
+    borderRadius: radii.md,
+  },
+  questionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
   },
   questionText: {
+    color: colors.text,
     fontSize: 16,
-    color: '#333',
-    lineHeight: 22,
-    paddingHorizontal: 15,
-    paddingTop: 15,
-    paddingBottom: 10,
-    fontWeight: '500',
+    lineHeight: 24,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
   answersContainer: {
-    paddingHorizontal: 15,
-    paddingBottom: 15,
-  },
-  answerOption: {
-    flexDirection: 'row',
-    padding: 15,
-    marginVertical: 4,
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  correctOption: {
-    backgroundColor: '#e8f5e9',
-    borderColor: '#2ecc71',
-    borderWidth: 2,
-  },
-  wrongOption: {
-    backgroundColor: '#fdecea',
-    borderColor: '#e74c3c',
-    borderWidth: 2,
-  },
-  answerLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#555',
-    width: 20,
-    marginRight: 10,
-  },
-  answerText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 20,
-  },
-  correctOptionText: {
-    color: '#1e7e34',
-    fontWeight: '500',
-  },
-  wrongOptionText: {
-    color: '#a93226',
-    fontWeight: '500',
+    marginTop: spacing.xxs,
   },
   feedbackBanner: {
-    marginHorizontal: 15,
-    marginBottom: 10,
-    borderRadius: 8,
-    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: spacing.md,
+    marginTop: spacing.xxs,
   },
   feedbackCorrect: {
-    backgroundColor: '#e8f5e9',
-    borderLeftWidth: 5,
-    borderLeftColor: '#2ecc71',
+    backgroundColor: colors.successSoft,
+    borderColor: 'rgba(18,128,92,0.26)',
   },
   feedbackWrong: {
-    backgroundColor: '#fdecea',
-    borderLeftWidth: 5,
-    borderLeftColor: '#e74c3c',
+    backgroundColor: colors.dangerSoft,
+    borderColor: 'rgba(217,45,32,0.24)',
+  },
+  feedbackIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  feedbackIconCorrect: {
+    backgroundColor: 'rgba(18,128,92,0.16)',
+  },
+  feedbackIconWrong: {
+    backgroundColor: 'rgba(217,45,32,0.14)',
+  },
+  feedbackIconGlyph: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  feedbackIconGlyphCorrect: {
+    color: colors.success,
+  },
+  feedbackIconGlyphWrong: {
+    color: colors.danger,
+  },
+  feedbackContent: {
+    flex: 1,
   },
   feedbackTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
   },
   correctAnswerText: {
-    marginTop: 6,
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 20,
+    marginTop: spacing.xxs,
+    fontSize: 13,
+    color: colors.textMuted,
+    lineHeight: 19,
   },
   footer: {
-    paddingHorizontal: 15,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'android' ? 25 : 15,
-    backgroundColor: '#fff',
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.md,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
-  nextButton: {
-    backgroundColor: '#1a4d7a',
-    paddingVertical: 13,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  nextButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: 'bold',
+    borderTopColor: colors.border,
   },
   footerHint: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.sm,
   },
   footerHintText: {
     fontSize: 13,
-    color: '#999',
+    color: colors.textSubtle,
   },
 });

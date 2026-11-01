@@ -10,6 +10,8 @@ import {
   getSessionSummary,
   getQuestionOptions,
   getGroupLabel,
+  normalizeCoverage,
+  computeCoverageSummary,
 } from '../learningEngine';
 import {
   createSeededRng,
@@ -17,6 +19,7 @@ import {
   makeBank,
   makeQuestion,
   makePendingEntry,
+  makeCoverageEntry,
 } from './helpers';
 
 const EXPECTED_WEIGHTS = {
@@ -420,9 +423,9 @@ describe('learningEngine - risposta (US1)', () => {
     const entry = result.session.pending[0];
     expect(entry.questionKey).toBe(session.current.questionKey);
     expect(entry.wrongCount).toBe(1);
-    expect(entry.firstWrongAt).toBe(201);
-    expect(entry.lastWrongAt).toBe(201);
-    expect(entry.lastProposedAt).toBe(201);
+    expect(entry.firstWrongAt).toBe(202);
+    expect(entry.lastWrongAt).toBe(202);
+    expect(entry.lastProposedAt).toBe(202);
 
     const record = result.session.records.get(session.current.questionKey);
     expect(record.firstAnswerCorrect).toBe(false);
@@ -487,9 +490,19 @@ describe('learningEngine - ripasso e persistenza (US3)', () => {
     session = answerWrong(session);
     const pendingKey = session.pending[0].questionKey;
     expect(session.newSinceReview).toBe(1);
+    expect(session.pending[0].newSinceWrong).toBe(0);
 
     session = simulateCorrectAnswers(session, 2);
     expect(session.newSinceReview).toBe(3);
+    expect(session.pending[0].newSinceWrong).toBe(2);
+
+    // Dopo solo 2 nuove domande il ripasso non deve ancora comparire.
+    const notYet = drawNextQuestion(session);
+    expect(notYet.current.source).toBe('new');
+    expect(notYet.current.questionKey).not.toBe(pendingKey);
+
+    session = answerCorrect(notYet.session);
+    expect(session.pending[0].newSinceWrong).toBe(3);
 
     const drawn = drawNextQuestion(session);
 
@@ -599,7 +612,49 @@ describe('learningEngine - ripasso e persistenza (US3)', () => {
     expect(result.session.pending[0].wrongCount).toBe(3);
     expect(result.session.pending[0].lastWrongAt).toBe(22);
     expect(result.session.pending[0].lastProposedAt).toBe(22);
+    expect(result.session.pending[0].newSinceWrong).toBe(0);
     expect(result.session.pendingRevision).toBe(2);
+  });
+
+  test('dopo un errore al ripasso servono altre 3 nuove domande', () => {
+    const bank = {
+      norme: [makeQuestion(0)],
+      meteo: Array.from({ length: 6 }, (_, index) => makeQuestion(index)),
+    };
+    const pending = [makePendingEntry({ questionKey: 'norme:0' })];
+    const rng = createSeededRng(77);
+
+    let session = createSession({ bank, pending, rng });
+
+    // La voce è già matura, ma con nuove domande disponibili si aspettano
+    // comunque 3 nuove estrazioni prima del ripasso.
+    for (let i = 0; i < 3; i += 1) {
+      session = draw(session);
+      session = answerCorrect(session);
+    }
+
+    session = draw(session);
+    expect(session.current.questionKey).toBe('norme:0');
+    expect(session.current.source).toBe('review');
+
+    // Errore al ripasso: il contatore riparte da zero.
+    session = answerWrong(session);
+    expect(session.pending[0].newSinceWrong).toBe(0);
+
+    // Con 3 nuove domande ancora disponibili, dopo le prime due non torna.
+    session = draw(session);
+    session = answerCorrect(session);
+    session = draw(session);
+    session = answerCorrect(session);
+    session = draw(session);
+    expect(session.current.source).toBe('new');
+    expect(session.current.questionKey).not.toBe('norme:0');
+    session = answerCorrect(session);
+
+    // Solo dopo la terza nuova domanda la voce è di nuovo riproponibile.
+    session = draw(session);
+    expect(session.current.questionKey).toBe('norme:0');
+    expect(session.current.source).toBe('review');
   });
 
   test('con nuove domande esaurite continua con i ripassi', () => {
@@ -653,7 +708,11 @@ describe('learningEngine - riepilogo (US4)', () => {
     session = draw(session);
     session = answerWrong(session);
     const wrongKey = session.current.questionKey;
-    // 1 nuova corretta: completate 3 nuove, la prossima deve essere il ripasso
+    // 3 nuove corrette: solo ora la domanda sbagliata può essere riproposta
+    session = draw(session);
+    session = answerCorrect(session);
+    session = draw(session);
+    session = answerCorrect(session);
     session = draw(session);
     session = answerCorrect(session);
     session = draw(session);
@@ -666,11 +725,11 @@ describe('learningEngine - riepilogo (US4)', () => {
 
     const summary = getSessionSummary(session, () => 999);
 
-    expect(summary.totalUnique).toBe(4);
-    expect(summary.firstAttemptCorrect).toBe(2);
+    expect(summary.totalUnique).toBe(6);
+    expect(summary.firstAttemptCorrect).toBe(4);
     expect(summary.laterCorrected).toBe(1);
     expect(summary.stillPending).toBe(1);
-    expect(summary.answeredCount).toBe(5);
+    expect(summary.answeredCount).toBe(7);
     expect(summary.startedAt).toBe(100);
     expect(summary.endedAt).toBe(999);
     expect(summary.storageWarning).toBeNull();
@@ -709,6 +768,12 @@ describe('learningEngine - riepilogo (US4)', () => {
       startedAt: 1000,
       endedAt: 2000,
       storageWarning: null,
+      coverage: {
+        seenCount: 0,
+        totalCount: 24,
+        remainingCount: 24,
+        percentage: 0,
+      },
     });
   });
 
@@ -773,6 +838,219 @@ describe('learningEngine - riepilogo (US4)', () => {
       startedAt: 0,
       endedAt: 0,
       storageWarning: null,
+      coverage: {
+        seenCount: 0,
+        totalCount: 0,
+        remainingCount: 0,
+        percentage: 0,
+      },
+    });
+  });
+});
+
+describe('learningEngine - copertura', () => {
+  test('normalizza le voci scartando orfane e correggendo i campi derivati', () => {
+    const index = buildQuestionIndex(makeBank());
+    const normalized = normalizeCoverage(
+      [
+        makeCoverageEntry({ questionKey: 'inesistente:0' }),
+        makeCoverageEntry({
+          questionKey: 'meteo:0',
+          sourceKey: 'meteo',
+          questionId: 0,
+          groupKey: 'aerodinamica',
+        }),
+        makeCoverageEntry({
+          questionKey: 'norme:0',
+          sourceKey: 'aerodinamica',
+        }),
+      ],
+      index,
+      () => 500
+    );
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toEqual({
+      questionKey: 'meteo:0',
+      sourceKey: 'meteo',
+      groupKey: 'meteo',
+      questionId: 0,
+      firstSeenAt: 100,
+      lastSeenAt: 100,
+      timesSeen: 1,
+    });
+  });
+
+  test('ripara i timestamp mancanti e unisce i duplicati in modo monotono', () => {
+    const index = buildQuestionIndex(makeBank());
+    const normalized = normalizeCoverage(
+      [
+        makeCoverageEntry({
+          questionKey: 'norme:0',
+          firstSeenAt: 100,
+          lastSeenAt: 200,
+          timesSeen: 2,
+        }),
+        makeCoverageEntry({
+          questionKey: 'norme:0',
+          firstSeenAt: 50,
+          lastSeenAt: 300,
+          timesSeen: 5,
+        }),
+        makeCoverageEntry({
+          questionKey: 'norme:1',
+          questionId: 1,
+          firstSeenAt: undefined,
+          lastSeenAt: undefined,
+          timesSeen: 0,
+        }),
+      ],
+      index,
+      () => 777
+    );
+
+    expect(normalized).toHaveLength(2);
+    expect(normalized[0]).toEqual(
+      makeCoverageEntry({
+        questionKey: 'norme:0',
+        firstSeenAt: 50,
+        lastSeenAt: 300,
+        timesSeen: 5,
+      })
+    );
+    expect(normalized[1]).toEqual(
+      makeCoverageEntry({
+        questionKey: 'norme:1',
+        questionId: 1,
+        firstSeenAt: 777,
+        lastSeenAt: 777,
+        timesSeen: 1,
+      })
+    );
+  });
+
+  test('ordina le voci per questionKey', () => {
+    const index = buildQuestionIndex(makeBank());
+    const normalized = normalizeCoverage(
+      [
+        makeCoverageEntry({ questionKey: 'norme:1', questionId: 1 }),
+        makeCoverageEntry({ questionKey: 'meteo:0', sourceKey: 'meteo', questionId: 0 }),
+      ],
+      index
+    );
+
+    expect(normalized.map((entry) => entry.questionKey)).toEqual([
+      'meteo:0',
+      'norme:1',
+    ]);
+  });
+
+  test('calcola il riepilogo della copertura con arrotondamento', () => {
+    const coverage = new Map([
+      ['a', makeCoverageEntry({ questionKey: 'a' })],
+      ['b', makeCoverageEntry({ questionKey: 'b' })],
+      ['c', makeCoverageEntry({ questionKey: 'c' })],
+    ]);
+
+    expect(computeCoverageSummary(coverage, 7)).toEqual({
+      seenCount: 3,
+      totalCount: 7,
+      remainingCount: 4,
+      percentage: 43,
+    });
+    expect(computeCoverageSummary([], 0)).toEqual({
+      seenCount: 0,
+      totalCount: 0,
+      remainingCount: 0,
+      percentage: 0,
+    });
+    expect(computeCoverageSummary(coverage, 2)).toEqual({
+      seenCount: 2,
+      totalCount: 2,
+      remainingCount: 0,
+      percentage: 100,
+    });
+  });
+
+  test('registra la copertura quando viene disegnata una domanda nuova', () => {
+    const result = drawNextQuestion(
+      createSession({ bank: makeBank(), rng: createSeededRng(2), now: createFakeClock(500) })
+    );
+
+    expect(result.coverageChanged).toBe(true);
+    const entry = result.session.coverage.get(result.current.questionKey);
+    expect(entry).toBeDefined();
+    expect(entry.timesSeen).toBe(1);
+    expect(entry.firstSeenAt).toBe(entry.lastSeenAt);
+  });
+
+  test('registra il ripasso senza contare due volte la stessa domanda', () => {
+    const bank = { norme: [makeQuestion(0)] };
+    const pending = [makePendingEntry({ questionKey: 'norme:0' })];
+
+    const first = drawNextQuestion(
+      createSession({ bank, pending, now: createFakeClock(10) })
+    );
+    expect(first.current.source).toBe('review');
+    expect(first.coverageChanged).toBe(true);
+    expect(first.session.coverage.size).toBe(1);
+
+    const second = drawNextQuestion(first.session);
+    expect(second.coverageChanged).toBe(false);
+    expect(second.session.coverage.size).toBe(1);
+  });
+
+  test('imposta coverageChanged a false quando current e gia valorizzato', () => {
+    const session = draw(createSession({ bank: makeBank() }));
+    const result = drawNextQuestion(session);
+
+    expect(result.coverageChanged).toBe(false);
+    expect(result.current).toBe(session.current);
+  });
+
+  test('imposta coverageChanged a false quando la sessione e esaurita', () => {
+    const bank = { norme: [makeQuestion(0)] };
+    let session = drawNextQuestion(createSession({ bank })).session;
+    session = answerCorrect(session);
+    const exhausted = drawNextQuestion(session);
+    expect(exhausted.session.phase).toBe('exhausted');
+
+    const again = drawNextQuestion(exhausted.session);
+    expect(again.coverageChanged).toBe(false);
+    expect(again.session.coverage.size).toBe(1);
+  });
+
+  test('non modifica la copertura della sessione originale', () => {
+    const session = createSession({ bank: makeBank() });
+    expect(session.coverage.size).toBe(0);
+
+    drawNextQuestion(session);
+
+    expect(session.coverage.size).toBe(0);
+  });
+
+  test('answerCurrent non altera la copertura', () => {
+    let session = draw(createSession({ bank: makeBank() }));
+    const before = Array.from(session.coverage.entries());
+
+    session = answerCorrect(session);
+
+    expect(Array.from(session.coverage.entries())).toEqual(before);
+  });
+
+  test('il riepilogo espone la copertura della sessione', () => {
+    const bank = { norme: [makeQuestion(0), makeQuestion(1)] };
+    let session = draw(createSession({ bank, now: createFakeClock(10) }));
+    session = answerCorrect(session);
+    session = draw(session);
+
+    const summary = getSessionSummary(session, () => 20);
+
+    expect(summary.coverage).toEqual({
+      seenCount: 2,
+      totalCount: 2,
+      remainingCount: 0,
+      percentage: 100,
     });
   });
 });

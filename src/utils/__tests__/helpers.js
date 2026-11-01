@@ -1,5 +1,7 @@
 // Utility condivise dai test: RNG deterministico, orologio finto e fixture.
 
+import { REVIEW_INTERVAL } from '../learningEngine';
+
 export function createSeededRng(seed = 123456789) {
   let a = seed >>> 0;
   return function rng() {
@@ -72,6 +74,31 @@ export function makePendingEntry(overrides = {}) {
     lastWrongAt: 100,
     lastProposedAt: 100,
     wrongCount: 1,
+    newSinceWrong: REVIEW_INTERVAL,
     ...overrides,
   };
+}
+
+export function makeCoverageEntry(overrides = {}) {
+  return {
+    questionKey: 'norme:0',
+    sourceKey: 'norme',
+    groupKey: 'circolazione',
+    questionId: 0,
+    firstSeenAt: 100,
+    lastSeenAt: 100,
+    timesSeen: 1,
+    ...overrides,
+  };
+}
+
+export function makeCoverageList(count = 3) {
+  return Array.from({ length: count }, (_, index) =>
+    makeCoverageEntry({
+      questionKey: `norme:${index}`,
+      questionId: index,
+      firstSeenAt: 100 + index,
+      lastSeenAt: 100 + index,
+    })
+  );
 }

@@ -2,11 +2,9 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
   ScrollView,
   StyleSheet,
   Alert,
-  Platform,
   Image,
 } from 'react-native';
 import {
@@ -15,10 +13,16 @@ import {
   getCategoryForIndex,
 } from '../utils/questionSelector';
 import figureMap from '../utils/figureMap';
+import AnswerOption from './ui/AnswerOption';
+import AppButton from './ui/AppButton';
+import ScreenHeader from './ui/ScreenHeader';
+import { colors, layout, radii, spacing } from '../theme';
+import useAppInsets from '../hooks/useAppInsets';
 
 export default function ExamScreen({ onFinish_exam }) {
   const [examQuestions, setExamQuestions] = useState(generateRandomExam);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const { bottom } = useAppInsets();
 
   const currentQuestion = useMemo(
     () => examQuestions[currentQuestionIndex],
@@ -27,8 +31,8 @@ export default function ExamScreen({ onFinish_exam }) {
 
   if (!currentQuestion) {
     return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: 'center', marginTop: 100, fontSize: 18, color: '#333' }}>
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>
           Nessuna domanda disponibile. Verificare i dati dell'esame.
         </Text>
       </View>
@@ -95,20 +99,13 @@ export default function ExamScreen({ onFinish_exam }) {
   const renderAnswerOption = (key, answerText) => {
     const isSelected = currentQuestion.userAnswer === key;
     return (
-      <TouchableOpacity
+      <AnswerOption
         key={key}
-        style={[styles.answerOption, isSelected && styles.selectedAnswer]}
+        label={key}
+        text={answerText}
+        state={isSelected ? 'selected' : 'default'}
         onPress={() => handleAnswerSelect(key)}
-      >
-        <Text
-          style={[styles.answerLabel, isSelected && styles.selectedAnswerLabel]}
-        >
-          {key}
-        </Text>
-        <Text style={[styles.answerText, isSelected && styles.selectedAnswerText]}>
-          {answerText}
-        </Text>
-      </TouchableOpacity>
+      />
     );
   };
 
@@ -120,20 +117,25 @@ export default function ExamScreen({ onFinish_exam }) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <Text style={styles.headerTitle}>Esame VDS</Text>
-          <Text style={styles.answeredCount}>
-            Risposte: {answeredCount}/{totalQuestions}
-          </Text>
-        </View>
-        <View style={styles.questionInfo}>
+      <ScreenHeader
+        title="Esame VDS"
+        right={
+          <View style={styles.counterPill}>
+            <Text style={styles.counterText}>
+              {`Risposte: ${answeredCount}/${totalQuestions}`}
+            </Text>
+          </View>
+        }
+      >
+        <View style={styles.metaRow}>
           <Text style={styles.questionNumber}>
-            Domanda {currentQuestionIndex + 1}/{totalQuestions}
+            {`Domanda ${currentQuestionIndex + 1}/${totalQuestions}`}
           </Text>
-          <Text style={styles.questionCategory}>{category}</Text>
+          <Text style={styles.questionCategory} numberOfLines={1}>
+            {category}
+          </Text>
         </View>
-        <View style={styles.progressBar}>
+        <View style={styles.progressTrack}>
           <View
             style={[
               styles.progressFill,
@@ -143,11 +145,15 @@ export default function ExamScreen({ onFinish_exam }) {
             ]}
           />
         </View>
-      </View>
+      </ScreenHeader>
 
-      <ScrollView style={styles.questionContainer}>
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={styles.bodyContent}
+        showsVerticalScrollIndicator={false}
+      >
         {currentQuestion.figura > 0 && figureMap[currentQuestion.figura] && (
-          <View style={styles.figureContainer}>
+          <View style={styles.figureCard}>
             <Image
               source={figureMap[currentQuestion.figura]}
               style={styles.figureImage}
@@ -156,7 +162,9 @@ export default function ExamScreen({ onFinish_exam }) {
           </View>
         )}
 
-        <Text style={styles.questionText}>{currentQuestion.domanda}</Text>
+        <View style={styles.questionCard}>
+          <Text style={styles.questionText}>{currentQuestion.domanda}</Text>
+        </View>
 
         <View style={styles.answersContainer}>
           {renderAnswerOption('A', currentQuestion.risposta_a)}
@@ -168,29 +176,33 @@ export default function ExamScreen({ onFinish_exam }) {
         </View>
       </ScrollView>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[
-            styles.navButton,
-            currentQuestionIndex === 0 && styles.navButtonDisabled,
-          ]}
+      <View style={[styles.footer, { paddingBottom: bottom }]}>
+        <AppButton
+          label="Precedente"
+          icon={'\u2039'}
+          variant="secondary"
+          size="md"
           onPress={handlePrevious}
           disabled={currentQuestionIndex === 0}
-        >
-          <Text style={styles.navButtonText}>{'\u2039'} PRECEDENTE</Text>
-        </TouchableOpacity>
+          style={styles.footerButton}
+        />
 
         {currentQuestionIndex < totalQuestions - 1 ? (
-          <TouchableOpacity style={styles.navButton} onPress={handleNext}>
-            <Text style={styles.navButtonText}>SUCCESSIVA {'\u203A'}</Text>
-          </TouchableOpacity>
+          <AppButton
+            label="Successiva"
+            variant="primary"
+            size="md"
+            onPress={handleNext}
+            style={styles.footerButton}
+          />
         ) : (
-          <TouchableOpacity
-            style={styles.submitButton}
+          <AppButton
+            label="Termina esame"
+            variant="danger"
+            size="md"
             onPress={handleSubmitExam}
-          >
-            <Text style={styles.submitButtonText}>TERMINA ESAME</Text>
-          </TouchableOpacity>
+            style={styles.footerButton}
+          />
         )}
       </View>
     </View>
@@ -200,162 +212,113 @@ export default function ExamScreen({ onFinish_exam }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
   },
-  header: {
-    backgroundColor: '#1a4d7a',
-    paddingTop: 20,
-    paddingBottom: 10,
-    paddingHorizontal: 15,
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: layout.screenPadding,
   },
-  headerRow: {
+  emptyText: {
+    fontSize: 16,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  counterPill: {
+    backgroundColor: colors.onBrandFaint,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+  },
+  counterText: {
+    color: colors.onBrand,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 5,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  answeredCount: {
-    fontSize: 14,
-    color: '#e0e0e0',
-  },
-  questionInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   questionNumber: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
+    color: colors.onBrand,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   questionCategory: {
-    fontSize: 13,
-    color: '#a0c8e0',
-    fontStyle: 'italic',
+    flexShrink: 1,
+    marginLeft: spacing.md,
+    color: colors.onBrandMuted,
+    fontSize: 12,
+    fontWeight: '500',
   },
-  progressBar: {
+  progressTrack: {
     width: '100%',
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 2,
-    marginTop: 5,
+    height: 6,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: radii.pill,
+    overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#2ecc71',
-    borderRadius: 2,
+    backgroundColor: '#5CB3FF',
+    borderRadius: radii.pill,
   },
-  questionContainer: {
+  body: {
     flex: 1,
   },
-  questionText: {
-    fontSize: 16,
-    color: '#333',
-    lineHeight: 22,
-    paddingHorizontal: 15,
-    paddingTop: 15,
-    paddingBottom: 10,
-    fontWeight: '500',
+  bodyContent: {
+    padding: layout.screenPadding,
+    paddingBottom: spacing.xl,
   },
-  figureContainer: {
-    alignItems: 'center',
-    padding: 10,
-    backgroundColor: '#e8f4fc',
-    marginHorizontal: 15,
-    marginTop: 10,
-    borderRadius: 8,
+  figureCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
   },
   figureImage: {
     width: '100%',
     height: 200,
-    borderRadius: 8,
+    borderRadius: radii.md,
   },
-  figureLabel: {
-    fontSize: 13,
-    color: '#666',
-    fontStyle: 'italic',
+  questionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  questionText: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
   answersContainer: {
-    paddingHorizontal: 15,
-    paddingBottom: 15,
+    marginTop: spacing.xxs,
   },
-  answerOption: {
+  footer: {
     flexDirection: 'row',
-    padding: 15,
-    marginVertical: 4,
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  selectedAnswer: {
-    backgroundColor: '#e8f5e9',
-    borderColor: '#4CAF50',
-    borderWidth: 2,
-  },
-  answerLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#555',
-    width: 20,
-    marginRight: 10,
-  },
-  selectedAnswerLabel: {
-    color: '#2E7D32',
-  },
-  answerText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 20,
-  },
-  selectedAnswerText: {
-    fontWeight: '500',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 15,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'android' ? 25 : 15,
-    backgroundColor: '#fff',
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: spacing.md,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: colors.border,
+    gap: spacing.sm,
   },
-  navButton: {
-    backgroundColor: '#1a4d7a',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+  footerButton: {
     flex: 1,
-    marginHorizontal: 5,
-    alignItems: 'center',
-  },
-  navButtonDisabled: {
-    backgroundColor: '#b0c4d8',
-  },
-  navButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  submitButton: {
-    backgroundColor: '#e74c3c',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    flex: 1.2,
-    marginHorizontal: 5,
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
   },
 });

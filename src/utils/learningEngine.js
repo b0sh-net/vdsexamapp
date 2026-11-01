@@ -162,6 +162,11 @@ function cloneSession(session) {
     ),
     seenKeys: new Set(session.seenKeys),
     pending: session.pending.map((entry) => ({ ...entry })),
+    coverage: new Map(
+      Array.from((session.coverage || new Map()).entries()).map(
+        ([key, value]) => [key, { ...value }]
+      )
+    ),
     records: new Map(
       Array.from(session.records.entries()).map(([key, value]) => [
         key,
@@ -202,6 +207,13 @@ function normalizePending(pending, index, now) {
     const wrongCount = Number.isFinite(entry.wrongCount) && entry.wrongCount > 0
       ? Math.floor(entry.wrongCount)
       : 1;
+    // Numero di nuove domande affrontate dopo l'ultimo errore.
+    // Le voci provenienti da versioni precedenti (senza il campo) sono
+    // considerate già mature e quindi subito riproponibili.
+    const newSinceWrong =
+      Number.isFinite(entry.newSinceWrong) && entry.newSinceWrong >= 0
+        ? Math.floor(entry.newSinceWrong)
+        : REVIEW_INTERVAL;
 
     const normalized = {
       questionKey: entry.questionKey,
@@ -212,6 +224,7 @@ function normalizePending(pending, index, now) {
       lastWrongAt,
       lastProposedAt,
       wrongCount,
+      newSinceWrong,
     };
 
     const existing = merged.get(normalized.questionKey);
@@ -229,6 +242,10 @@ function normalizePending(pending, index, now) {
         normalized.lastProposedAt
       ),
       wrongCount: Math.max(existing.wrongCount, normalized.wrongCount),
+      newSinceWrong: Math.max(
+        existing.newSinceWrong,
+        normalized.newSinceWrong
+      ),
     });
   });
 
@@ -240,6 +257,133 @@ function normalizePending(pending, index, now) {
       return a.firstWrongAt - b.firstWrongAt;
     }
     return a.questionKey.localeCompare(b.questionKey);
+  });
+}
+
+function normalizeCoverageEntry(entry, index, now) {
+  if (!entry || typeof entry !== 'object') return null;
+  if (typeof entry.questionKey !== 'string' || entry.questionKey === '') {
+    return null;
+  }
+
+  const questionEntry = index.byKey.get(entry.questionKey);
+  if (!questionEntry) return null;
+  if (
+    entry.sourceKey !== undefined &&
+    entry.sourceKey !== questionEntry.sourceKey
+  ) {
+    return null;
+  }
+  if (
+    entry.questionId !== undefined &&
+    entry.questionId !== questionEntry.question.id
+  ) {
+    return null;
+  }
+
+  const firstSeenAt = isTimestamp(entry.firstSeenAt) ? entry.firstSeenAt : now();
+  const lastSeenCandidate = isTimestamp(entry.lastSeenAt)
+    ? entry.lastSeenAt
+    : firstSeenAt;
+  const lastSeenAt = Math.max(firstSeenAt, lastSeenCandidate);
+  const timesSeen =
+    Number.isFinite(entry.timesSeen) && entry.timesSeen >= 1
+      ? Math.floor(entry.timesSeen)
+      : 1;
+
+  return {
+    questionKey: entry.questionKey,
+    sourceKey: questionEntry.sourceKey,
+    groupKey: questionEntry.groupKey,
+    questionId: questionEntry.question.id,
+    firstSeenAt,
+    lastSeenAt,
+    timesSeen,
+  };
+}
+
+function mergeCoverageEntries(existing, normalized) {
+  return {
+    ...existing,
+    firstSeenAt: Math.min(existing.firstSeenAt, normalized.firstSeenAt),
+    lastSeenAt: Math.max(existing.lastSeenAt, normalized.lastSeenAt),
+    timesSeen: Math.max(existing.timesSeen, normalized.timesSeen),
+  };
+}
+
+/**
+ * Normalizza l'elenco delle domande incontrate rispetto all'archivio.
+ * Scarta voci orfane o incoerenti, ripara i campi mancanti e unisce i duplicati.
+ */
+export function normalizeCoverage(coverage, index, now = Date.now) {
+  if (!Array.isArray(coverage)) return [];
+
+  const merged = new Map();
+
+  coverage.forEach((entry) => {
+    const normalized = normalizeCoverageEntry(entry, index, now);
+    if (!normalized) return;
+
+    const existing = merged.get(normalized.questionKey);
+    if (!existing) {
+      merged.set(normalized.questionKey, normalized);
+      return;
+    }
+    merged.set(normalized.questionKey, mergeCoverageEntries(existing, normalized));
+  });
+
+  return Array.from(merged.values()).sort((a, b) =>
+    a.questionKey.localeCompare(b.questionKey)
+  );
+}
+
+/**
+ * Calcola il riepilogo della copertura a partire da una Map o da un array.
+ */
+export function computeCoverageSummary(coverage, totalCount) {
+  const total =
+    Number.isFinite(totalCount) && totalCount > 0 ? Math.floor(totalCount) : 0;
+  let seenCount = 0;
+
+  if (coverage instanceof Map) {
+    seenCount = coverage.size;
+  } else if (Array.isArray(coverage)) {
+    const keys = new Set();
+    coverage.forEach((entry) => {
+      if (entry && typeof entry.questionKey === 'string') {
+        keys.add(entry.questionKey);
+      }
+    });
+    seenCount = keys.size;
+  }
+
+  seenCount = Math.max(0, Math.min(seenCount, total));
+
+  return {
+    seenCount,
+    totalCount: total,
+    remainingCount: Math.max(0, total - seenCount),
+    percentage: total > 0 ? Math.round((seenCount / total) * 100) : 0,
+  };
+}
+
+function markEncountered(session, questionEntry, timestamp = session.now()) {
+  const existing = session.coverage.get(questionEntry.questionKey);
+
+  if (existing) {
+    existing.lastSeenAt = Math.max(existing.lastSeenAt, timestamp);
+    existing.timesSeen += 1;
+    return;
+  }
+
+  session.coverage.set(questionEntry.questionKey, {
+    questionKey: questionEntry.questionKey,
+    sourceKey: questionEntry.sourceKey,
+    groupKey: questionEntry.groupKey,
+    questionId: questionEntry.question.id,
+    firstSeenAt: timestamp,
+    lastSeenAt: timestamp,
+    timesSeen: 1,
   });
 }
 
@@ -263,12 +407,20 @@ function makeCurrent(entry, source, pendingAtPresentation) {
 export function createSession({
   bank,
   pending = [],
+  coverage = [],
   rng = Math.random,
   now = Date.now,
 } = {}) {
   const index = buildQuestionIndex(bank);
   const pendingList = normalizePending(pending, index, now);
   const pendingKeys = new Set(pendingList.map((entry) => entry.questionKey));
+  const rawCoverage = coverage instanceof Map
+    ? Array.from(coverage.values())
+    : coverage;
+  const coverageList = normalizeCoverage(rawCoverage, index, now);
+  const coverageMap = new Map(
+    coverageList.map((entry) => [entry.questionKey, entry])
+  );
 
   const pools = new Map();
   LEARNING_GROUPS.forEach((group) => {
@@ -286,6 +438,8 @@ export function createSession({
     pools,
     seenKeys: new Set(),
     pending: pendingList,
+    coverage: coverageMap,
+    coverageTotal: index.byKey.size,
     newSinceReview: 0,
     records: new Map(),
     current: null,
@@ -323,8 +477,15 @@ function pickWeightedGroup(session) {
 function pickReviewEntry(session) {
   if (session.pending.length === 0) return null;
 
+  // Una domanda sbagliata può essere riproposta solo dopo che sono state
+  // affrontate altre REVIEW_INTERVAL domande nuove.
+  const eligible = session.pending.filter(
+    (entry) => entry.newSinceWrong >= REVIEW_INTERVAL
+  );
+  if (eligible.length === 0) return null;
+
   let selected = null;
-  session.pending.forEach((entry) => {
+  eligible.forEach((entry) => {
     if (!selected) {
       selected = entry;
       return;
@@ -351,6 +512,7 @@ export function drawNextQuestion(session) {
       session,
       current: null,
       pendingRevisionChanged: false,
+      coverageChanged: false,
       error: 'NO_SESSION',
     };
   }
@@ -367,6 +529,7 @@ export function drawNextQuestion(session) {
       session: next,
       current: null,
       pendingRevisionChanged: false,
+      coverageChanged: false,
     };
   }
 
@@ -375,12 +538,16 @@ export function drawNextQuestion(session) {
       session: next,
       current: next.current,
       pendingRevisionChanged: false,
+      coverageChanged: false,
     };
   }
 
   const newQuestionsAvailable = hasNewQuestions(next);
+  const hasEligibleReview = next.pending.some(
+    (entry) => entry.newSinceWrong >= REVIEW_INTERVAL
+  );
   const shouldReview =
-    next.pending.length > 0 &&
+    hasEligibleReview &&
     (next.newSinceReview >= REVIEW_INTERVAL || !newQuestionsAvailable);
 
   if (shouldReview) {
@@ -390,15 +557,18 @@ export function drawNextQuestion(session) {
       : null;
 
     if (reviewEntry && questionEntry) {
-      reviewEntry.lastProposedAt = next.now();
+      const presentationTimestamp = next.now();
+      reviewEntry.lastProposedAt = presentationTimestamp;
       next.newSinceReview = 0;
       next.pendingRevision += 1;
       next.current = makeCurrent(questionEntry, 'review', true);
       next.phase = 'answering';
+      markEncountered(next, questionEntry, presentationTimestamp);
       return {
         session: next,
         current: next.current,
         pendingRevisionChanged: true,
+        coverageChanged: true,
       };
     }
 
@@ -414,6 +584,7 @@ export function drawNextQuestion(session) {
       session: next,
       current: null,
       pendingRevisionChanged: false,
+      coverageChanged: false,
     };
   }
 
@@ -425,6 +596,7 @@ export function drawNextQuestion(session) {
       session: next,
       current: null,
       pendingRevisionChanged: false,
+      coverageChanged: false,
     };
   }
 
@@ -435,11 +607,13 @@ export function drawNextQuestion(session) {
   next.newSinceReview += 1;
   next.current = makeCurrent(questionEntry, 'new', false);
   next.phase = 'answering';
+  markEncountered(next, questionEntry);
 
   return {
     session: next,
     current: next.current,
     pendingRevisionChanged: false,
+    coverageChanged: true,
   };
 }
 
@@ -489,11 +663,22 @@ export function answerCurrent(session, answerKey) {
 
   next.records.set(current.questionKey, record);
 
+  let pendingRevisionChanged = false;
+
+  // Solo le domande nuove fanno avanzare il contatore di attesa dei ripassi.
+  // La domanda appena sbagliata non conta se stessa.
+  if (current.source === 'new' && next.pending.length > 0) {
+    next.pending.forEach((entry) => {
+      entry.newSinceWrong =
+        (Number.isFinite(entry.newSinceWrong) ? entry.newSinceWrong : 0) + 1;
+    });
+    pendingRevisionChanged = true;
+  }
+
   const pendingIndex = next.pending.findIndex(
     (entry) => entry.questionKey === current.questionKey
   );
   const wasPending = pendingIndex >= 0 || current.pendingAtPresentation;
-  let pendingRevisionChanged = false;
 
   if (!correct) {
     const timestamp = next.now();
@@ -502,6 +687,7 @@ export function answerCurrent(session, answerKey) {
       entry.wrongCount += 1;
       entry.lastWrongAt = timestamp;
       entry.lastProposedAt = timestamp;
+      entry.newSinceWrong = 0;
     } else {
       next.pending.push({
         questionKey: current.questionKey,
@@ -512,13 +698,16 @@ export function answerCurrent(session, answerKey) {
         lastWrongAt: timestamp,
         lastProposedAt: timestamp,
         wrongCount: 1,
+        newSinceWrong: 0,
       });
     }
     pendingRevisionChanged = true;
-    next.pendingRevision += 1;
   } else if (pendingIndex >= 0) {
     next.pending.splice(pendingIndex, 1);
     pendingRevisionChanged = true;
+  }
+
+  if (pendingRevisionChanged) {
     next.pendingRevision += 1;
   }
 
@@ -558,6 +747,12 @@ export function getSessionSummary(session, now) {
       startedAt: 0,
       endedAt: 0,
       storageWarning: null,
+      coverage: {
+        seenCount: 0,
+        totalCount: 0,
+        remainingCount: 0,
+        percentage: 0,
+      },
     };
   }
 
@@ -574,6 +769,15 @@ export function getSessionSummary(session, now) {
   });
 
   const clock = typeof now === 'function' ? now : session.now || Date.now;
+  const totalCount =
+    session.index && session.index.byKey ? session.index.byKey.size : 0;
+  const knownCoverage = new Map();
+
+  if (session.coverage instanceof Map && session.index) {
+    session.coverage.forEach((entry, key) => {
+      if (session.index.byKey.has(key)) knownCoverage.set(key, entry);
+    });
+  }
 
   return {
     totalUnique: session.records.size,
@@ -584,6 +788,7 @@ export function getSessionSummary(session, now) {
     startedAt: session.startedAt,
     endedAt: clock(),
     storageWarning: session.storageWarning || null,
+    coverage: computeCoverageSummary(knownCoverage, totalCount),
   };
 }
 
@@ -598,4 +803,6 @@ export default {
   getSessionSummary,
   getQuestionOptions,
   getGroupLabel,
+  normalizeCoverage,
+  computeCoverageSummary,
 };

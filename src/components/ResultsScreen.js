@@ -1,162 +1,264 @@
 import React, { useMemo } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import AnswerOption from './ui/AnswerOption';
+import ScreenHeader, { HeaderAction } from './ui/ScreenHeader';
+import { colors, layout, radii, spacing, shadows } from '../theme';
+import useAppInsets from '../hooks/useAppInsets';
+
+const OPTION_FIELDS = {
+  A: 'risposta_a',
+  B: 'risposta_b',
+  C: 'risposta_c',
+  D: 'risposta_d',
+};
+
+function StatTile({ value, label, tone }) {
+  return (
+    <View style={styles.statTile}>
+      <Text
+        style={[
+          styles.statValue,
+          tone === 'success' && styles.statValueSuccess,
+          tone === 'danger' && styles.statValueDanger,
+          tone === 'muted' && styles.statValueMuted,
+        ]}
+      >
+        {value}
+      </Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function SummaryRow({ label, value, last }) {
+  return (
+    <View style={[styles.summaryRow, !last && styles.summaryRowBorder]}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function ReviewItem({ question, type }) {
+  const isWrong = type === 'wrong';
+  const optionKeys = ['A', 'B', 'C', 'D'].slice(0, question.num_risposte || 2);
+
+  return (
+    <View style={styles.reviewItem}>
+      <View style={styles.reviewHeader}>
+        <View style={styles.reviewNumber}>
+          <Text style={styles.reviewNumberText}>{question.questionIndex + 1}</Text>
+        </View>
+        <View
+          style={[
+            styles.reviewBadge,
+            isWrong ? styles.reviewBadgeWrong : styles.reviewBadgeMuted,
+          ]}
+        >
+          <Text
+            style={[
+              styles.reviewBadgeText,
+              isWrong ? styles.reviewBadgeTextWrong : styles.reviewBadgeTextMuted,
+            ]}
+          >
+            {isWrong ? 'Errata' : 'Non risposta'}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.reviewQuestion}>{question.domanda}</Text>
+      {question.figura > 0 ? (
+        <Text style={styles.reviewFigure}>Figura {question.figura}</Text>
+      ) : null}
+
+      <View style={styles.reviewOptions}>
+        {optionKeys.map((key) => {
+          const state =
+            key === question.esatta
+              ? 'correct'
+              : isWrong && key === question.userAnswer
+                ? 'wrong'
+                : 'default';
+
+          return (
+            <AnswerOption
+              key={key}
+              label={key}
+              text={question[OPTION_FIELDS[key]]}
+              state={state}
+              disabled
+              accessibilityState={{ disabled: true }}
+            />
+          );
+        })}
+      </View>
+
+      <View style={styles.reviewFooter}>
+        {isWrong ? (
+          <Text style={styles.reviewWrong}>
+            La tua risposta: {question.userAnswer}
+          </Text>
+        ) : (
+          <Text style={styles.reviewUnanswered}>Nessuna risposta</Text>
+        )}
+        <Text style={styles.reviewCorrect}>
+          Corretta: {question.esatta}
+        </Text>
+      </View>
+    </View>
+  );
+}
 
 export default function ResultsScreen({
   examData,
   examResults,
   onReturnToMenu,
 }) {
+  const { bottom } = useAppInsets();
+  const questions = examData || [];
+
+  const risposteErrate = useMemo(
+    () =>
+      questions.filter(
+        (q) => q.userAnswer !== 'X' && q.userAnswer !== q.esatta
+      ),
+    [questions]
+  );
+
+  const nonRisposte = useMemo(
+    () => questions.filter((q) => q.userAnswer === 'X'),
+    [questions]
+  );
+
+  const risposteDate = useMemo(
+    () => questions.filter((q) => q.userAnswer !== 'X').length,
+    [questions]
+  );
+
   if (!examData || !examResults) {
     return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: 'center', marginTop: 100, fontSize: 18, color: '#333' }}>
-          Nessun risultato disponibile.
-        </Text>
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyText}>Nessun risultato disponibile.</Text>
       </View>
     );
   }
 
-  const risposteErrate = useMemo(
-    () =>
-      examData.filter(
-        (q) => q.userAnswer !== 'X' && q.userAnswer !== q.esatta
-      ),
-    [examData]
-  );
-
-  const nonRisposte = useMemo(
-    () => examData.filter((q) => q.userAnswer === 'X'),
-    [examData]
-  );
-
-  const risposteDate = useMemo(
-    () => examData.filter((q) => q.userAnswer !== 'X').length,
-    [examData]
-  );
+  const totalErrors = risposteErrate.length + nonRisposte.length;
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Esito Esame</Text>
-        <TouchableOpacity style={styles.backButton} onPress={onReturnToMenu}>
-          <Text style={styles.backButtonText}>MENU</Text>
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Esito Esame"
+        right={
+          <HeaderAction label="Menu" onPress={onReturnToMenu} />
+        }
+      />
 
-      <ScrollView>
-        {/* Risultato */}
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={[styles.bodyContent, { paddingBottom: bottom }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Esito */}
         <View
           style={[
-            styles.resultBox,
-            examResults.passed
-              ? { backgroundColor: '#e8f5e9', borderColor: '#4CAF50' }
-              : { backgroundColor: '#ffebee', borderColor: '#f44336' },
+            styles.resultHero,
+            examResults.passed ? styles.resultPassed : styles.resultFailed,
           ]}
         >
+          <View
+            style={[
+              styles.resultIcon,
+              examResults.passed ? styles.resultIconPassed : styles.resultIconFailed,
+            ]}
+          >
+            <Text
+              style={[
+                styles.resultIconGlyph,
+                examResults.passed
+                  ? styles.resultIconGlyphPassed
+                  : styles.resultIconGlyphFailed,
+              ]}
+            >
+              {examResults.passed ? '\u2713' : '\u2715'}
+            </Text>
+          </View>
+          <Text style={styles.resultEyebrow}>ESITO FINALE</Text>
           <Text
             style={[
               styles.resultText,
               examResults.passed
-                ? { color: '#2E7D32' }
-                : { color: '#C62828' },
+                ? styles.resultTextPassed
+                : styles.resultTextFailed,
             ]}
           >
             {examResults.passed ? 'IDONEO' : 'NON IDONEO'}
           </Text>
+          <Text style={styles.resultHint}>
+            {examResults.passed
+              ? 'Hai superato la simulazione d\u2019esame.'
+              : `Hai superato la soglia di ${examResults.maxErrors} errori consentiti.`}
+          </Text>
         </View>
 
         {/* Statistiche */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{examResults.corrette}</Text>
-            <Text style={styles.statLabel}>Corrette</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{examResults.errate}</Text>
-            <Text style={styles.statLabel}>Errate</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{examResults.nonRisposte}</Text>
-            <Text style={styles.statLabel}>Non risposte</Text>
-          </View>
+        <View style={styles.statsRow}>
+          <StatTile
+            value={examResults.corrette}
+            label="Corrette"
+            tone="success"
+          />
+          <StatTile value={examResults.errate} label="Errate" tone="danger" />
+          <StatTile
+            value={examResults.nonRisposte}
+            label="Non risposte"
+            tone="muted"
+          />
         </View>
 
         {/* Riepilogo */}
-        <View style={styles.summaryBox}>
-          <Text style={styles.summaryText}>
-            Totale domande: {examResults.total}
-          </Text>
-          <Text style={styles.summaryText}>
-            Errori massimi consentiti: {examResults.maxErrors}
-          </Text>
-          <Text style={styles.summaryText}>
-            Risposte date: {risposteDate}
-          </Text>
+        <View style={styles.summaryCard}>
+          <Text style={styles.sectionTitle}>Riepilogo</Text>
+          <SummaryRow label="Totale domande" value={examResults.total} />
+          <SummaryRow
+            label="Errori massimi consentiti"
+            value={examResults.maxErrors}
+          />
+          <SummaryRow label="Risposte date" value={risposteDate} last />
         </View>
 
-        {/* Revisione risposte errate */}
-        {(risposteErrate.length > 0 || nonRisposte.length > 0) && (
+        {/* Revisione */}
+        {totalErrors > 0 ? (
           <View style={styles.reviewSection}>
-            <Text style={styles.reviewTitle}>
-              Revisione risposte errate:
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Revisione</Text>
+              <View style={styles.sectionCount}>
+                <Text style={styles.sectionCountText}>{totalErrors}</Text>
+              </View>
+            </View>
+
+            {risposteErrate.map((question) => (
+              <ReviewItem
+                key={`err-${question.questionIndex}`}
+                question={question}
+                type="wrong"
+              />
+            ))}
+
+            {nonRisposte.map((question) => (
+              <ReviewItem
+                key={`nr-${question.questionIndex}`}
+                question={question}
+                type="unanswered"
+              />
+            ))}
+          </View>
+        ) : (
+          <View style={styles.perfectCard}>
+            <Text style={styles.perfectTitle}>Nessun errore da rivedere</Text>
+            <Text style={styles.perfectText}>
+              Hai risposto correttamente a tutte le domande della simulazione.
             </Text>
-
-            {/* Risposte errate */}
-            {risposteErrate.map((question, index) => (
-              <View key={`err-${index}`} style={styles.reviewItem}>
-                <Text style={styles.reviewQuestion}>
-                  {question.questionIndex + 1}) {question.domanda}
-                </Text>
-                {question.figura > 0 && (
-                  <Text style={styles.reviewFigure}>
-                    [Figura {question.figura}]
-                  </Text>
-                )}
-                <Text style={styles.reviewOptions}>
-                  A) {question.risposta_a}{'\n'}
-                  B) {question.risposta_b}{'\n'}
-                  {question.num_risposte >= 3 &&
-                    `C) ${question.risposta_c}\n`}
-                  {question.num_risposte === 4 &&
-                    `D) ${question.risposta_d}\n`}
-                </Text>
-                <Text style={styles.reviewAnswer}>
-                  Risposta data:{' '}
-                  <Text style={styles.wrongAnswer}>
-                    {question.userAnswer}
-                  </Text>{' '}
-                  - Risposta esatta:{' '}
-                  <Text style={styles.correctAnswer}>
-                    {question.esatta}
-                  </Text>
-                </Text>
-              </View>
-            ))}
-
-            {/* Non risposte */}
-            {nonRisposte.map((question, index) => (
-              <View
-                key={`nr-${index}`}
-                style={[styles.reviewItem, { opacity: 0.7 }]}
-              >
-                <Text style={styles.reviewQuestion}>
-                  {question.questionIndex + 1}) {question.domanda}
-                </Text>
-                <Text style={styles.unansweredText}>
-                  Non risposta - Risposta esatta:{' '}
-                  <Text style={styles.correctAnswer}>
-                    {question.esatta}
-                  </Text>
-                </Text>
-              </View>
-            ))}
           </View>
         )}
       </ScrollView>
@@ -167,130 +269,297 @@ export default function ResultsScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
   },
-  header: {
-    backgroundColor: '#1a4d7a',
-    paddingTop: 20,
-    paddingBottom: 10,
-    paddingHorizontal: 15,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  emptyContainer: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: layout.screenPadding,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
+  emptyText: {
+    fontSize: 16,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
-  backButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 8,
+  body: {
+    flex: 1,
   },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
+  bodyContent: {
+    padding: layout.screenPadding,
   },
-  resultBox: {
-    margin: 15,
-    padding: 20,
-    borderRadius: 10,
+  resultHero: {
     alignItems: 'center',
-    borderWidth: 2,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+  },
+  resultPassed: {
+    backgroundColor: colors.successSoft,
+    borderColor: 'rgba(18,128,92,0.28)',
+  },
+  resultFailed: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: 'rgba(217,45,32,0.24)',
+  },
+  resultIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  resultIconPassed: {
+    backgroundColor: 'rgba(18,128,92,0.14)',
+  },
+  resultIconFailed: {
+    backgroundColor: 'rgba(217,45,32,0.12)',
+  },
+  resultIconGlyph: {
+    fontSize: 25,
+    fontWeight: '700',
+  },
+  resultIconGlyphPassed: {
+    color: colors.success,
+  },
+  resultIconGlyphFailed: {
+    color: colors.danger,
+  },
+  resultEyebrow: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.6,
+    marginBottom: spacing.xs,
   },
   resultText: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: -0.8,
   },
-  statsContainer: {
+  resultTextPassed: {
+    color: colors.success,
+  },
+  resultTextFailed: {
+    color: colors.danger,
+  },
+  resultHint: {
+    marginTop: spacing.xs,
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 15,
-    marginBottom: 10,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
-  statBox: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 8,
+  statTile: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.md,
     alignItems: 'center',
-    minWidth: 80,
-    marginHorizontal: 3,
+    ...(shadows.card || {}),
   },
   statValue: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1a4d7a',
+    fontWeight: '700',
+    color: colors.text,
+    letterSpacing: -0.5,
+  },
+  statValueSuccess: {
+    color: colors.success,
+  },
+  statValueDanger: {
+    color: colors.danger,
+  },
+  statValueMuted: {
+    color: colors.textSubtle,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    textAlign: 'center',
   },
-  summaryBox: {
-    backgroundColor: '#fff',
-    marginHorizontal: 15,
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
+  summaryCard: {
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xs,
+    ...(shadows.card || {}),
   },
-  summaryText: {
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginBottom: spacing.sm,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm + 1,
+  },
+  summaryRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  summaryLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  summaryValue: {
+    color: colors.text,
     fontSize: 14,
-    color: '#555',
-    marginBottom: 5,
+    fontWeight: '700',
   },
   reviewSection: {
-    marginHorizontal: 15,
-    marginBottom: 15,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 15,
+    marginTop: spacing.md,
   },
-  reviewTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#e74c3c',
-    marginBottom: 15,
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  sectionCount: {
+    minWidth: 24,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: radii.pill,
+    backgroundColor: colors.dangerSoft,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  sectionCountText: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '700',
   },
   reviewItem: {
-    marginBottom: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...(shadows.card || {}),
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  reviewNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reviewNumberText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reviewBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 9,
+    borderRadius: radii.pill,
+  },
+  reviewBadgeWrong: {
+    backgroundColor: colors.dangerSoft,
+  },
+  reviewBadgeMuted: {
+    backgroundColor: colors.surfaceAlt,
+  },
+  reviewBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  reviewBadgeTextWrong: {
+    color: colors.danger,
+  },
+  reviewBadgeTextMuted: {
+    color: colors.textSubtle,
   },
   reviewQuestion: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 22,
+    marginBottom: spacing.sm,
   },
   reviewFigure: {
+    color: colors.textSubtle,
     fontSize: 12,
     fontStyle: 'italic',
-    color: '#666',
-    marginBottom: 5,
+    marginTop: -spacing.xxs,
+    marginBottom: spacing.sm,
   },
   reviewOptions: {
+    marginTop: spacing.xxs,
+  },
+  reviewFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.xxs,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  reviewWrong: {
+    color: colors.danger,
     fontSize: 12,
-    color: '#555',
-    marginBottom: 5,
-    lineHeight: 18,
+    fontWeight: '600',
   },
-  reviewAnswer: {
-    fontSize: 14,
+  reviewUnanswered: {
+    color: colors.textSubtle,
+    fontSize: 12,
+    fontWeight: '600',
   },
-  wrongAnswer: {
-    color: '#f44336',
-    fontWeight: 'bold',
+  reviewCorrect: {
+    color: colors.success,
+    fontSize: 12,
+    fontWeight: '600',
   },
-  correctAnswer: {
-    color: '#4CAF50',
-    fontWeight: 'bold',
+  perfectCard: {
+    marginTop: spacing.md,
+    backgroundColor: colors.successSoft,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(18,128,92,0.24)',
+    padding: spacing.lg,
+    alignItems: 'center',
   },
-  unansweredText: {
-    fontSize: 14,
-    color: '#999',
+  perfectTitle: {
+    color: colors.success,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  perfectText: {
+    marginTop: spacing.xs,
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
   },
 });

@@ -2,7 +2,7 @@
   "expo": {
     "name": "VDS Exam Simulator",
     "slug": "vdsexamapp",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
@@ -23,6 +23,9 @@
         "projectId": "6a93dd8d-baee-4e0a-81af-23ff68a94f04"
       }
     },
-    "owner": "simone.b.8"
+    "owner": "simone.b.8",
+    "plugins": [
+      "expo-sharing"
+    ]
   }
 }
