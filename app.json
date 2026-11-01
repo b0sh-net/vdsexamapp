@@ -5,15 +5,17 @@
     "version": "2.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.vdsexamapp"
+      "bundleIdentifier": "net.b0sh.vdsstudio"
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a4d7a"
       },
-      "package": "com.vdsexamapp"
+      "package": "net.b0sh.vdsstudio"
     },
     "web": {
       "bundler": "metro"

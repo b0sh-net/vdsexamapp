@@ -204,19 +204,84 @@ npm test -- --runInBand -t "riepilogo|summary"
 9. Da **Informazioni > Dati di addestramento** esporta il file e verifica che i dati locali restino invariati; importa un file valido e controlla che copertura e arretrato siano uniti senza perdite.
 10. Dal menu verifica che **SIMULA ESAME** continui a generare 70 domande in 9 categorie.
 
-## 📦 Download APK
+## 📦 Distribuzione
+
+### Google Play Store — Test interni (in corso)
+
+La pubblicazione su Google Play è iniziata con il canale **Test interni**.
+
+| Voce | Valore |
+|------|--------|
+| Applicazione | VDS Studio |
+| Package | `net.b0sh.vdsstudio` |
+| Versione attuale | `2.0.0` (`versionCode 1`) |
+| Formato di pubblicazione | Android App Bundle (`.aab`) firmato con keystore di upload |
+| Canale | Test interni |
+
+Stato del percorso di pubblicazione:
+
+1. ✅ App Bundle firmato generato
+2. ✅ Keystore di upload creato e conservato fuori dal repository
+3. ⏳ Creazione della scheda app nella Play Console
+4. ⏳ Caricamento dell'AAB nel canale **Test interni**
+5. ⏳ Aggiunta dei tester e avvio del roll-out
+6. ⏳ Promozione a **Test chiuso** e successivamente a **Produzione**
+
+#### Generare l'App Bundle
+
+```powershell
+$env:JAVA_HOME = "C:\Users\simone.galliani\.jdks\temurin-17.0.17"
+cd android
+.\gradlew.bat bundleRelease --no-daemon
+```
+
+Output: `android/app/build/outputs/bundle/release/app-release.aab` (tutte le ABI: `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`).
+
+La firma di rilascio è configurata in `android/app/build.gradle`, che legge il file
+`../keystore/keystore.properties` (cartella `keystore/` **fuori dal repository**, con il
+keystore `vdsexamapp-upload.jks`). Se il file non è presente, il build release ripiega
+sul keystore di debug: in quel caso l'AAB **non è adatto alla pubblicazione** su Play.
+
+> ⚠️ Conserva una copia di backup del keystore e della relativa password: sono
+> indispensabili per pubblicare gli aggiornamenti dell'app.
+
+#### Note di rilascio (Test interni)
+
+```text
+Novità della versione 2.0.0
+
+• Copertura di addestramento: scopri quante domande dell'archivio hai già incontrato, per materia e in totale
+• Esporta e importa i dati di addestramento in un unico file, con unione non distruttiva e senza perdere progressi
+• Nuova icona e nuovo nome dell'app: VDS Studio
+• Correzioni e miglioramenti di stabilità
+```
+
+Le note di rilascio hanno un limite di **500 caratteri** per lingua.
+
+#### Note per i rilasci successivi
+
+- Incrementare `versionCode` (`android/app/build.gradle` o `expo.android.versionCode` in `app.json`) prima di ogni nuovo caricamento: Play rifiuta un `versionCode` già usato.
+- `versionName` segue la versione dell'app (`2.0.0`).
+- Se si rigenera il progetto nativo con `npx expo prebuild`, riapplicare le personalizzazioni di `android/app/build.gradle` descritte in `AGENTS.md` (versione CMake 3.31.6 e firma di rilascio).
+
+### Download APK
 
 L'ultimo APK Android compilato è disponibile nella sezione [**Releases**](https://github.com/b0sh-net/vdsexamapp/releases) del repository. Puoi installarlo direttamente sul tuo dispositivo Android senza bisogno di Expo Go.
 
-### Compilare l'APK in autonomia
+#### Compilare l'APK in autonomia
 
-Se desideri generare tu stesso l'APK:
+Due alternative:
 
 ```bash
+# Build locale (nessun account richiesto)
+cd android && ./gradlew assembleRelease
+# output: android/app/build/outputs/apk/release/app-release.apk
+
+# Build cloud con EAS
 npx eas build --platform android --profile preview
 ```
 
-Richiede un account [Expo](https://expo.dev) e la CLI `eas` configurata. La build viene eseguita sui server Expo cloud.
+La build EAS richiede un account [Expo](https://expo.dev) e la CLI `eas` configurata; la build locale richiede JDK 17 e Android SDK (vedi `AGENTS.md`).
 
 ## 📄 Licenza
 
@@ -261,6 +326,9 @@ L'applicazione è stata completamente sviluppata con:
 - ✅ Suite di test automatici (Jest + React Native Testing Library) e regressione dell'esame
 - ✅ Schermata Informazioni con licenza, disclaimer no-profit e link repository
 - ✅ Build APK tramite EAS Build (Expo cloud)
+- ✅ Nuova icona applicazione (adattiva su Android)
+- ✅ Package/Bundle identifier `net.b0sh.vdsstudio`
+- ✅ App Bundle (`.aab`) firmato per la pubblicazione su Google Play — Test interni
 
 ---
 

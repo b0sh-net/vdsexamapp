@@ -18,6 +18,7 @@ qr-*.png
 expo-*.log
 
 # Native
+keys/
 .kotlin/
 *.orig.*
 *.jks
