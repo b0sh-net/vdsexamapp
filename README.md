@@ -283,6 +283,12 @@ npx eas build --platform android --profile preview
 
 La build EAS richiede un account [Expo](https://expo.dev) e la CLI `eas` configurata; la build locale richiede JDK 17 e Android SDK (vedi `AGENTS.md`).
 
+## 🔒 Privacy
+
+VDS Studio **non raccoglie alcun dato**. Non invia telemetria né statistiche, non
+identifica l'utente o il dispositivo e tutta l'elaborazione avviene **localmente** sul
+telefono. Leggi la [Privacy Policy](privacy.md) completa.
+
 ## 📄 Licenza
 
 Questo progetto è distribuito sotto la licenza **GNU GPL v3**.
