@@ -52,7 +52,7 @@ export default function MainMenu({ onStart_exam, onStart_learning, onShow_info }
             <View style={styles.logoBadge}>
               <Text style={styles.logoGlyph}>VDS</Text>
             </View>
-            <Text style={styles.title}>Simulatore Esame VDS</Text>
+            <Text style={styles.title}>VDS Studio</Text>
             <Text style={styles.subtitle}>MULTIASSI · ALA FISSA</Text>
           </View>
         </View>

@@ -249,7 +249,7 @@ export default function InfoScreen({
     <View style={styles.container}>
       <ScreenHeader
         title="Informazioni"
-        subtitle="Simulatore Esame VDS · v2.0.0"
+        subtitle="VDS Studio · v2.0.0"
         onBack={onReturnToMenu}
         backLabel="Indietro"
       />
@@ -259,7 +259,7 @@ export default function InfoScreen({
         contentContainerStyle={[styles.bodyContent, { paddingBottom: bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        <SectionCard title="Simulatore Esame VDS">
+        <SectionCard title="VDS Studio">
           <Text style={styles.cardSubtitle}>MULTIASSI — ALA FISSA</Text>
           <Text style={styles.cardText}>
             Applicazione open-source per la simulazione dell'esame VDS (Volo da

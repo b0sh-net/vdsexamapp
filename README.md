@@ -1,4 +1,4 @@
-# VDS Exam Simulator
+# VDS Studio
 
 Un'applicazione React Native per simulare l'esame VDS Multiassi - Ala Fissa, con 882 domande organizzate in 9 categorie.
 
