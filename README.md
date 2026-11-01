@@ -229,18 +229,21 @@ Stato del percorso di pubblicazione:
 
 #### Generare l'App Bundle
 
-```powershell
-$env:JAVA_HOME = "C:\Users\simone.galliani\.jdks\temurin-17.0.17"
+Requisiti: JDK 17 e Android SDK installati e configurati (istruzioni per l'ambiente di
+sviluppo in `AGENTS.md`).
+
+```bash
 cd android
-.\gradlew.bat bundleRelease --no-daemon
+./gradlew bundleRelease
 ```
 
 Output: `android/app/build/outputs/bundle/release/app-release.aab` (tutte le ABI: `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`).
 
-La firma di rilascio è configurata in `android/app/build.gradle`, che legge il file
-`../keystore/keystore.properties` (cartella `keystore/` **fuori dal repository**, con il
-keystore `vdsexamapp-upload.jks`). Se il file non è presente, il build release ripiega
-sul keystore di debug: in quel caso l'AAB **non è adatto alla pubblicazione** su Play.
+La firma di rilascio è configurata in `android/app/build.gradle` e legge le credenziali
+da un file di proprietà **non versionato** che punta al keystore di upload (percorso e
+credenziali non sono nel repository). Se il file non è presente, il build release
+ripiega sul keystore di debug: in quel caso l'AAB **non è adatto alla pubblicazione** su
+Play.
 
 > ⚠️ Conserva una copia di backup del keystore e della relativa password: sono
 > indispensabili per pubblicare gli aggiornamenti dell'app.
